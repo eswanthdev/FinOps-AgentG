@@ -1,0 +1,54 @@
+# Architecture
+
+```
+ deliveries (folder)          ┌──────────────────────── costlens (Python, stdlib only) ───────────────────────┐
+ manifest.json + CSV  ──────▶ │ ingest/sources.py   ExportSource protocol: LocalDirectorySource (done),      │
+                              │                     S3ExportSource (interface only)                         │
+                              │ ingest/loader.py    validate → checksum → parse → idempotent apply          │
+                              │ ingest/cur2.py      CUR 2.0 row contract + amortization rules               │
+                              │ store.py            SQLite: deliveries, line_items, accounts, pins, audit   │
+                              │ query/model.py      CostQuery: the only query shape (typed, bounded)        │
+                              │ query/engine.py     explore + variance + coverage, integer nano-USD         │
+                              │ agent/interpreter.py DeterministicInterpreter → Interpretation(CostQuery)   │
+                              │ agent/orchestrator.py Orchestrator → VisualizationWorker → tools            │
+                              │ server.py           localhost HTTP API + static UI                          │
+                              └────────────────────────────────────────────────────────────────────────────┘
+                                              ▲ JSON
+                              web/index.html, app.js, charts.js, styles.css (no external assets)
+```
+
+## Request flow: a question
+
+1. UI posts `{question, previous}` to `POST /api/ask`. `previous` is the last `CostQuery`, used for follow-ups.
+2. `Orchestrator.ask` loads a `Vocabulary` (known services, accounts, regions, usage types, tag keys/values)
+   from the data and calls the interpreter.
+3. `DeterministicInterpreter` returns an `Interpretation`: `ok` with a validated `CostQuery`, or `clarify`,
+   or `unsupported` (with the module that would own it: optimize / govern).
+4. For `ok`, the orchestrator calls the `VisualizationWorker` tool `query_costs(CostQuery)`. Tools are a fixed
+   allow-list per worker; calling anything else raises `PermissionError`. Each call is audited.
+5. `engine.run` computes coverage, then the numbers, and returns the result with its calculation, SQL template,
+   parameters, source deliveries and warnings.
+6. The UI renders the summary and a dashboard card. Controls on the card call `POST /api/query` with a modified
+   `CostQuery` directly (no interpreter), so adjusting a view is exact.
+
+## Agent design
+
+- **Orchestrator**: routes a request to a worker. Today only `visualization` exists. `PLANNED_WORKERS` lists
+  `optimize` and `govern` so the UI can show them honestly; they have no code path.
+- **Workers**: own a small set of typed tools. The visualization worker has `query_costs` and `data_coverage`.
+- **Interpreter protocol**: `interpret(question, vocab, today, previous) -> Interpretation`. A model-backed
+  interpreter must return the same structure. Its output is validated by `CostQuery.validate()` exactly like
+  the deterministic one, so a model can never run free-form SQL or exceed limits.
+- **Mode labelling**: every response carries `mode: deterministic` and the UI shows "Deterministic mode".
+
+Planned workers for the next phases (interfaces to be added when built): data quality, cost investigation,
+optimization, risk, action planning, savings verification, governance.
+
+## Why these choices
+
+- **SQLite + stdlib HTTP**: zero install, easy to review, good enough for one tenant's CUR at daily
+  granularity in local mode. The engine is isolated behind `CostQuery`, so an Athena/DuckDB backend can replace
+  the SQL layer for real exports without changing the UI or the interpreter.
+- **Integer nano-USD**: CUR has up to 10 decimals; storing 9 decimals as integers makes every SUM exact.
+- **Replace-per-period revisions**: CUR revisions restate a whole billing period, so replacing is the only way
+  to never double count.

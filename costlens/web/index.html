@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CostLens</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/static/styles.css">
+<script src="/static/charts.js" defer></script>
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M15.5 15.5 21 21" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><path d="M7.5 12.5v-2M10.5 12.5V8M13.5 12.5v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <span class="brand-name">CostLens</span>
+      <span class="brand-tag">Preview</span>
+    </div>
+    <button class="btn-new" id="newChat" type="button">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      New conversation
+    </button>
+    <nav class="nav">
+      <div class="nav-label">Modules</div>
+      <button class="nav-item active" data-view="chat" type="button"><span class="dot dot-live"></span>Visualize</button>
+      <div class="nav-item planned" aria-disabled="true" title="Next phase: find, validate and plan savings"><span class="dot"></span>Optimize<span class="pill-mini">Next</span></div>
+      <div class="nav-item planned" aria-disabled="true" title="Later phase: budgets and guardrails"><span class="dot"></span>Govern<span class="pill-mini">Planned</span></div>
+      <div class="nav-label">Workspace</div>
+      <button class="nav-item" data-view="dashboards" type="button">Saved dashboards<span class="count" id="pinCount"></span></button>
+      <button class="nav-item" data-view="data" type="button">Data &amp; coverage</button>
+    </nav>
+    <div class="history" id="historyWrap" hidden>
+      <div class="nav-label">This conversation</div>
+      <ol id="history"></ol>
+    </div>
+    <div class="data-card" id="dataCard" aria-live="polite">
+      <div class="skeleton-line"></div><div class="skeleton-line short"></div>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim" hidden></div>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="icon-btn menu-btn" id="menuBtn" type="button" aria-label="Open navigation">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <div class="topbar-title" id="topbarTitle">Visualize</div>
+      <div class="topbar-right">
+        <span class="mode-pill" id="modePill" tabindex="0">Deterministic mode</span>
+        <span class="data-pill" id="dataPill" hidden>Synthetic data</span>
+      </div>
+    </header>
+
+    <section class="view view-chat" id="view-chat">
+      <div class="thread" id="thread" aria-live="polite">
+        <div class="empty" id="emptyState">
+          <h1 class="greeting">Where is your AWS money going?</h1>
+          <p class="sub">Ask in plain English. Each answer opens as a dashboard you can adjust, with the evidence behind every number.</p>
+          <div class="suggestions" id="starterSuggestions"></div>
+        </div>
+      </div>
+      <form class="composer" id="composer" autocomplete="off">
+        <div class="composer-box">
+          <label class="sr-only" for="question">Ask about your AWS costs</label>
+          <textarea id="question" rows="1" maxlength="500" placeholder="Ask about your AWS costs…"></textarea>
+          <button class="send" id="sendBtn" type="submit" aria-label="Send" disabled>
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 16V4M5 9l5-5 5 5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </div>
+        <p class="composer-note" id="composerNote">Numbers are computed by code from CUR line items. No AI model is used in this mode.</p>
+      </form>
+    </section>
+
+    <section class="view view-dashboards" id="view-dashboards" hidden>
+      <div class="page">
+        <div class="page-head">
+          <h2>Saved dashboards</h2>
+          <p class="muted">Pinned views re-run against the latest ingested data. Dates are saved as fixed ranges.</p>
+        </div>
+        <div class="pin-grid" id="pinGrid"></div>
+      </div>
+    </section>
+
+    <section class="view view-data" id="view-data" hidden>
+      <div class="page" id="dataPage"></div>
+    </section>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="chart-tip" id="chartTip" hidden></div>
+</body>
+</html>

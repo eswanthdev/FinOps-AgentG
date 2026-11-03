@@ -1,0 +1,12 @@
+[project]
+name = "costlens"
+version = "0.1.0"
+description = "Evidence-backed FinOps agent for AWS - Visualization module (local, synthetic data)"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "playwright>=1.40"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
