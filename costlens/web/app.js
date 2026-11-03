@@ -18,7 +18,7 @@
       else if (k === "style") n.style.cssText = v; // CSSOM: allowed by the strict CSP
       else n.setAttribute(k, v === true ? "" : v);
     }
-    kids.flat().forEach(c => { if (c !== null && c !== undefined && c !== false) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
+    kids.flat(Infinity).forEach(c => { if (c !== null && c !== undefined && c !== false) n.appendChild(typeof c === "string" ? document.createTextNode(c) : c); });
     return n;
   }
   async function api(path, opts) {
@@ -104,13 +104,16 @@
   // ------------------------------------------------------------ views
   function showView(v) {
     state.view = v;
-    ["chat", "dashboards", "data"].forEach(x => { $("view-" + x).hidden = x !== v; });
+    ["chat", "dashboards", "data", "anomalies", "budgets"].forEach(x => { $("view-" + x).hidden = x !== v; });
     document.querySelectorAll(".nav-item[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === v));
-    $("topbarTitle").textContent = { chat: "Visualize", dashboards: "Saved dashboards", data: "Data & coverage" }[v];
+    $("topbarTitle").textContent = { chat: "Visualize", dashboards: "Saved dashboards", data: "Data & coverage",
+                                     anomalies: "Anomalies", budgets: "Budgets & forecasting" }[v];
     $("app").classList.remove("nav-open");
     C.hideTip();
     if (v === "dashboards") renderDashboards();
     if (v === "data") renderDataPage();
+    if (v === "anomalies") window.CostLensFeatures.renderAnomalies();
+    if (v === "budgets") window.CostLensFeatures.renderBudgets();
     if (v === "chat") $("question").focus();
   }
 
@@ -120,6 +123,8 @@
     ["Investigate", "Why did costs increase in October compared to September?"],
     ["Trend", "Daily EC2 cost by account for the last 30 days"],
     ["Ownership", "Top 5 teams by amortized cost this month"],
+    ["Anomalies", "Any cost anomalies in the last 90 days?"],
+    ["Budget", "Set up a monthly budget of $5,000 for prod-data and alert ops@example.com at 80% and 100%"],
   ];
   function renderStarters() {
     const box = $("starterSuggestions");
@@ -170,6 +175,7 @@
   }
 
   function renderAssistant(body, resp) {
+    if (resp.kind) { window.CostLensFeatures.renderChatSpecial(body, resp); followups(body, resp.suggestions); return; }
     const it = resp.interpretation;
     if (it.status !== "ok") {
       if (it.module && it.module !== "visualize") body.appendChild(h("div", { class: "module-note", text: (it.module === "optimize" ? "Optimize" : "Govern") + " · not in this release" }));
@@ -514,8 +520,28 @@
     await loadStatus();
     try { state.dims = await api("/api/dimensions"); } catch (e) { state.dims = null; }
     refreshPinCount();
+    window.CostLensFeatures.refreshCounts();
     $("question").focus();
   }
+  async function openQuery(query, label) {
+    showView("chat");
+    $("emptyState").hidden = true;
+    const userMsg = h("div", { class: "msg msg-user" }, h("div", { class: "bubble", text: label }));
+    const holder = h("div");
+    const body = h("div", { class: "msg-body" }, h("p", { class: "msg-text", text: "Opened directly from the evidence, with these exact filters:" }), holder);
+    $("thread").append(userMsg, h("div", { class: "msg msg-assistant" }, h("div", { class: "avatar" }, icon.logo()), body));
+    state.history.push({ q: label, el: userMsg }); renderHistory();
+    holder.appendChild(h("div", { class: "thinking" }, h("span", { class: "dots" }, h("span"), h("span"), h("span")), "Running query…"));
+    try {
+      const resp = await api("/api/query", { method: "POST", body: { query } });
+      mountCard(holder, resp.result, { onResult: r => { if (r.status === "ok") state.previous = r.query; } });
+      if (resp.result.status === "ok") state.previous = resp.result.query;
+    } catch (e) { holder.textContent = ""; holder.appendChild(h("div", { class: "notice error", text: e.message })); }
+    userMsg.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   document.addEventListener("DOMContentLoaded", boot);
   window.CostLens = { ask, showView };
+  window.CostLensUI = { h, api, toast, kpi, statusPill, fmtDate, fmtTs, addDays, mountCard, showView, ask, openQuery,
+                        state, icon, loadStatus };
 })();

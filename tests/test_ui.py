@@ -145,3 +145,62 @@ def test_untrusted_text_is_not_rendered_as_html(page):
     page.wait_for_selector(".card")
     assert page.evaluate("window.__xss") is None
     assert page.locator(".msg-user .bubble img").count() == 0
+
+
+def test_sidebar_order(page):
+    labels = [t.strip() for t in page.locator(".nav > .nav-item").all_inner_texts()]
+    order = [next(i for i, l in enumerate(labels) if l.startswith(x)) for x in ("Visualize", "Optimize", "Govern", "Anomalies", "Budgets")]
+    assert order == sorted(order)
+
+
+def test_anomalies_page_and_status(page):
+    page.click(".nav-item[data-view=anomalies]")
+    page.wait_for_selector("[data-anomaly] .chart-wrap svg")
+    expect(page.locator("[data-anomaly]")).to_have_count(2)
+    assert "8 new resource(s)" in page.locator("[data-anomaly]").first.inner_text()
+    page.locator("[data-anomaly]").first.get_by_role("button", name="Dismiss").click()
+    expect(page.locator("[data-anomaly]")).to_have_count(1)
+    expect(page.locator("#anomalyCount")).to_have_text("1")
+    page.locator("[data-anomaly]").first.get_by_role("button", name="Investigate in Visualize").click()
+    page.wait_for_selector("#thread .card .chart-wrap svg")
+    assert "by usage type" in page.locator("#thread .card .card-title").last.inner_text()
+
+
+def test_budget_plain_english_flow(page):
+    page.click(".nav-item[data-view=budgets]")
+    page.wait_for_selector(".create-box textarea")
+    page.fill(".create-box textarea", "Set up a monthly budget of $5,000 for prod-data and email ravi@example.com at 80% and 100%, and when the forecast crosses 100%")
+    page.get_by_role("button", name="Preview budget").click()
+    page.wait_for_selector("text=Review budget before creating")
+    assert "prod-data (310987654321)" in page.locator(".create-box").inner_text()
+    assert page.locator("[data-budget]").count() == 0  # nothing saved before confirmation
+    page.get_by_role("button", name="Create budget").click()
+    page.wait_for_selector("[data-budget]")
+    card = page.locator("[data-budget]").first
+    assert "Forecast over budget" in card.inner_text() and "ravi@example.com" in card.inner_text()
+    assert "Saved to outbox" in page.locator(".panel", has_text="Alert outbox").inner_text()
+    expect(page.locator("#budgetCount")).to_have_text("1")
+    card.get_by_role("button", name="Delete").click()
+    card.get_by_role("button", name="Confirm delete").click()
+    page.wait_for_selector("text=No budgets yet.")
+
+
+def test_budget_preview_validation_error(page):
+    page.click(".nav-item[data-view=budgets]")
+    page.fill(".create-box textarea", "budget of $500 for sandbox, email a@b.co at 50%")
+    page.get_by_role("button", name="Preview budget").click()
+    page.wait_for_selector("text=Review budget before creating")
+    page.get_by_label("Email alerts to").fill("not-an-email")
+    page.get_by_role("button", name="Create budget").click()
+    page.wait_for_selector(".create-box .notice.error:not([hidden])")
+    assert "Not a valid email" in page.locator(".create-box .notice.error").inner_text()
+
+
+def test_chat_budget_and_forecast(page):
+    send(page, "Set up a monthly budget of $5,000 for prod-data and alert ops@example.com at 80% and 100%")
+    page.wait_for_selector("text=Review budget before creating")
+    page.get_by_role("button", name="Create budget").click()
+    page.wait_for_selector("text=View in Budgets & forecasting")
+    send(page, "Forecast prod-data cost for this month")
+    page.wait_for_selector("text=Forecast · November 2026")
+    assert not page.errors

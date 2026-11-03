@@ -10,6 +10,12 @@ Done: see README. Remaining polish for Stage 1:
 - More chart types users expect from Cost Explorer (area, cumulative), and a usage-quantity metric.
 - RI amortization (RIFee, DiscountedUsage) so amortized cost works for RI customers.
 
+## Stage 1b — Anomalies and Budgets & forecasting (this release, local and synthetic) ✅
+
+Next for this stage: background scheduler for alert checks, anomaly email subscriptions, Slack/Teams alerts,
+seasonality-aware forecast (weekday pattern, month-start charges), optional sync to real AWS Budgets
+(needs AWS write access and separate approval).
+
 ## Stage 2 — Live read-only AWS pilot (needs your approval for AWS access)
 
 1. With a pilot customer, set up a CUR 2.0 Data Export to their own S3 bucket (customer does this).

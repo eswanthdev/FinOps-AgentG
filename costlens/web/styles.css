@@ -265,3 +265,45 @@ details.calc summary::-webkit-details-marker { display: none; }
   .ctl select, .ctl input { width: 100%; }
   .tbl th, .tbl td { padding: 6px 10px; }
 }
+
+/* ---------------- anomalies + budgets */
+.alert-count { color: var(--up); font-weight: 600; }
+.summary-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; align-items: center; }
+.tabs { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--surface); }
+.tabs button { border: 0; background: transparent; padding: 5px 12px; font-size: 13px; color: var(--ink-2); }
+.tabs button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.stack { display: grid; gap: 14px; }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.st-open, .st-exceeded, .st-forecast_exceeded, .st-failed { background: var(--err-bg); color: var(--err-ink); border-color: transparent; }
+.st-acknowledged, .st-warning, .st-not_sent_no_provider, .st-no_recipients { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
+.st-dismissed, .st-ended { background: var(--surface-2); color: var(--ink-3); }
+.st-on_track, .st-sent, .st-sustained, .st-spike, .st-ongoing { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.st-no_data { color: var(--ink-3); }
+.st-spike, .st-sustained { background: var(--surface-2); color: var(--ink-2); }
+.st-ongoing { background: var(--err-bg); color: var(--err-ink); }
+.explain { padding: 4px 16px 10px; font-size: 14px; }
+.card-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 16px 14px; border-top: 1px solid var(--line-2); align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 9px; padding: 6px 12px; font-size: 13.5px; color: var(--ink); }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.btn.danger { color: var(--err-ink); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.create-box { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+.create-box h3 { margin: 0 0 4px; font-size: 15px; }
+.create-box textarea { width: 100%; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--bg); resize: vertical; min-height: 64px; margin: 8px 0; }
+.create-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; padding: 12px 16px; }
+.form-grid .ctl input, .form-grid .ctl select { width: 100%; }
+.form-grid .wide { grid-column: 1 / -1; }
+.th-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.progress { position: relative; height: 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); margin: 10px 16px 4px; overflow: visible; }
+.progress .bar { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; background: var(--accent); }
+.progress .bar.over { background: var(--up); }
+.progress .fc { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink-2); }
+.progress .mk { position: absolute; top: -3px; bottom: -3px; width: 1px; background: var(--ink-3); opacity: .6; }
+.progress-legend { display: flex; justify-content: space-between; gap: 10px; padding: 0 16px 6px; font-size: 12px; color: var(--ink-3); }
+.mono { font-family: var(--mono); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink-2); }
+.tbl tr.clickable { cursor: pointer; }
+.tbl tr.clickable:hover td { background: var(--surface-2); }
+.mini-list .row-item { display: flex; justify-content: space-between; gap: 10px; padding: 8px 16px; border-top: 1px solid var(--line-2); font-size: 13.5px; }
+.mini-list .row-item:first-child { border-top: 0; }

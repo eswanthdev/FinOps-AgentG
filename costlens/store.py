@@ -64,6 +64,35 @@ CREATE TABLE IF NOT EXISTS audit_events (
     detail TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS anomaly_states (
+    anomaly_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS budgets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    spec_json TEXT NOT NULL,
+    source_text TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    budget_id INTEGER NOT NULL,
+    threshold_key TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    recipients TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    body TEXT NOT NULL,
+    delivery_status TEXT NOT NULL,
+    delivery_detail TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE (budget_id, threshold_key, period_start)
+);
+
 CREATE TABLE IF NOT EXISTS pins (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,

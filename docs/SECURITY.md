@@ -16,9 +16,15 @@
 | Per-worker tool allow-list | `agent/orchestrator.py` |
 | Audit log of ingestion outcomes, questions (redacted), tool calls, pins | `audit_events` table |
 | Secret redaction (AWS key ids, `secret=`/`token=` pairs, 40-char key-like strings) before audit | `orchestrator.redact` |
+| Budget creation needs explicit confirmation; budget, alert and anomaly-status changes are audited | `budgets.py`, `server.py` |
+| SMTP credentials read only from environment variables; never stored, logged, returned or shown | `notify.py` |
+| Email header injection blocked (CR/LF stripped from subjects); recipients validated, max 10 | `notify.py`, `budgets.py` |
 | Audit retention purge on server start (`COSTLENS_AUDIT_RETENTION_DAYS`, default 90) | `store.purge_audit` |
 
 ## Designed, not implemented
+
+- **Alert recipients**: today any valid address can be added. Production needs a verified-domain allow-list
+  and recipient confirmation, so the tool cannot be used to email arbitrary people.
 
 - **Customer-controlled deployment**: runs inside the customer's AWS account (container or Lambda + static UI),
   data never leaves it.

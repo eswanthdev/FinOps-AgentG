@@ -11,6 +11,9 @@
                               │ query/engine.py     explore + variance + coverage, integer nano-USD         │
                               │ agent/interpreter.py DeterministicInterpreter → Interpretation(CostQuery)   │
                               │ agent/orchestrator.py Orchestrator → VisualizationWorker → tools            │
+                              │ anomalies.py        14-day median/MAD daily detection, drivers, owner       │
+                              │ budgets.py          budget spec + plain-English parser, forecast, alerts    │
+                              │ notify.py           OutboxNotifier (default) / SmtpNotifier (env-configured)│
                               │ server.py           localhost HTTP API + static UI                          │
                               └────────────────────────────────────────────────────────────────────────────┘
                                               ▲ JSON
@@ -33,7 +36,8 @@
 
 ## Agent design
 
-- **Orchestrator**: routes a request to a worker. Today only `visualization` exists. `PLANNED_WORKERS` lists
+- **Orchestrator**: routes a request to a worker. Active workers: `visualization`, `anomalies`, `budgets`
+  (budget requests, budget lists and forecasts are routed before the cost interpreter). `PLANNED_WORKERS` lists
   `optimize` and `govern` so the UI can show them honestly; they have no code path.
 - **Workers**: own a small set of typed tools. The visualization worker has `query_costs` and `data_coverage`.
 - **Interpreter protocol**: `interpret(question, vocab, today, previous) -> Interpretation`. A model-backed

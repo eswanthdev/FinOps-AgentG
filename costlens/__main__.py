@@ -33,6 +33,9 @@ def _ingest(db: Path, source: Path, synthetic: bool) -> list:
             set_meta(conn, "expected_start_period", fixtures.EXPECTED_START_PERIOD)
         else:
             set_meta(conn, "data_mode", "customer-local")
+        from .budgets import evaluate
+        for n in evaluate(conn):
+            print(f"  budget alert: {n['budget']} {n['threshold']} -> {n['status']}")
         return outcomes
     finally:
         conn.close()

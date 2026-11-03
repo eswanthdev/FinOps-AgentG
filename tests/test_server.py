@@ -97,3 +97,40 @@ def test_audit_records_and_redacts(server):
     q_events = [e for e in body["events"] if e["event_type"] == "question.received"]
     assert q_events and "AKIA" not in q_events[0]["detail"] and "[REDACTED]" in q_events[0]["detail"]
     assert any(e["event_type"] == "tool.call" for e in body["events"])
+
+
+def test_chat_routes_budget_anomaly_forecast(server):
+    s, b, _ = call(server, "POST", "/api/ask", {"question": "Set up a monthly budget of $5,000 for prod-data and alert ops@x.co at 80%"})
+    assert b["kind"] == "budget_preview" and b["preview"]["spec"]["amount"] == "5000.00"
+    s, b, _ = call(server, "POST", "/api/ask", {"question": "any anomalies?"})
+    assert b["kind"] == "anomalies" and b["total"] == 2
+    s, b, _ = call(server, "POST", "/api/ask", {"question": "forecast EC2 cost this month"})
+    assert b["kind"] == "forecast" and b["forecast"]["filters"] == {"service": ["AmazonEC2"]}
+    assert b["suggestions"][0].startswith("Set up a monthly budget of $")
+    s, b, _ = call(server, "POST", "/api/ask", {"question": "forecast next month"})
+    assert b["kind"] == "forecast_clarify"
+    s, b, _ = call(server, "POST", "/api/ask", {"question": "block EC2 spend with an SCP"})
+    assert b["interpretation"]["module"] == "govern"
+
+
+def test_budget_api_lifecycle(server):
+    s, b, _ = call(server, "POST", "/api/budgets/parse", {"text": "budget of $100 for sandbox, email a@b.co at 50%"})
+    assert s == 200 and b["status"] == "ok"
+    s, r, _ = call(server, "POST", "/api/budgets", {"spec": b["spec"], "source_text": "x"})
+    assert s == 201 and r["notifications"][0]["status"] == "not_sent_no_provider"
+    s, lst, _ = call(server, "GET", "/api/budgets")
+    assert len(lst["budgets"]) == 1 and lst["outbox"][0]["recipients"] == ["a@b.co"]
+    assert lst["email"]["configured"] is False and lst["forecast"]["total"]["status"] == "ok"
+    bad = dict(b["spec"], recipients=["nope"])
+    assert call(server, "POST", "/api/budgets", {"spec": bad})[0] == 400
+    assert call(server, "DELETE", f"/api/budgets/{r['id']}", {})[0] == 200
+    assert call(server, "DELETE", f"/api/budgets/{r['id']}", {})[0] == 404
+
+
+def test_anomaly_api(server):
+    s, a, _ = call(server, "GET", "/api/anomalies")
+    aid = a["anomalies"][0]["id"]
+    assert call(server, "POST", f"/api/anomalies/{aid}", {"status": "acknowledged"})[0] == 200
+    assert call(server, "POST", f"/api/anomalies/{aid}", {"status": "nonsense"})[0] == 400
+    s, a, _ = call(server, "GET", "/api/anomalies")
+    assert a["open_count"] == 1

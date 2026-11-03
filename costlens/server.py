@@ -17,14 +17,15 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .agent.orchestrator import Orchestrator, PLANNED_WORKERS, model_mode
+from . import anomalies, budgets, notify
+from .agent.orchestrator import ACTIVE_WORKERS, Orchestrator, PLANNED_WORKERS, model_mode
 from .query import engine
 from .query.model import CostQuery, QueryError
 from .status import data_status
 from .store import connect, utc_now
 
 WEB_DIR = Path(__file__).parent / "web"
-STATIC = {"app.js": "text/javascript", "styles.css": "text/css", "charts.js": "text/javascript"}
+STATIC = {"app.js": "text/javascript", "styles.css": "text/css", "charts.js": "text/javascript", "features.js": "text/javascript"}
 MAX_BODY = 64 * 1024
 _HOST_RE = re.compile(r"^(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$")
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -129,7 +130,14 @@ def make_handler(db_path: str, source_label: str):
                     s = data_status(conn, source_label)
                     s["model"] = model_mode()
                     s["planned_modules"] = PLANNED_WORKERS
+                    s["active_modules"] = ACTIVE_WORKERS
+                    s["email"] = notify.describe()
                     return self._json(200, s)
+                if path == "/api/anomalies":
+                    return self._json(200, anomalies.summary(conn))
+                if path == "/api/budgets":
+                    return self._json(200, {"budgets": budgets.list_status(conn), "outbox": budgets.outbox(conn),
+                                            "email": notify.describe(), "forecast": budgets.org_forecast(conn)})
                 if path == "/api/dimensions":
                     return self._json(200, engine.dimension_values(conn))
                 if path == "/api/pins":
@@ -160,6 +168,29 @@ def make_handler(db_path: str, source_label: str):
                     if not isinstance(data.get("query"), dict):
                         raise ApiError(400, "query must be an object")
                     return self._json(200, orch.run_query(data["query"]))
+                m = re.match(r"^/api/anomalies/([0-9a-f]{16})$", path)
+                if m:
+                    try:
+                        anomalies.set_status(conn, m.group(1), str(data.get("status", "")), str(data.get("note", "")))
+                    except ValueError as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    orch.audit.record("anomaly.status", {"id": m.group(1), "status": data.get("status")})
+                    return self._json(200, {"id": m.group(1), "status": data.get("status")})
+                if path == "/api/budgets/parse":
+                    text = data.get("text")
+                    if not isinstance(text, str):
+                        raise ApiError(400, "text must be a string")
+                    return self._json(200, budgets.parse_budget(text, orch.vocabulary(), engine.reference_date(conn)))
+                if path == "/api/budgets":
+                    try:
+                        spec = budgets.BudgetSpec.from_dict(data.get("spec"))
+                        bid = budgets.create(conn, spec, str(data.get("source_text") or "")[:600])
+                    except budgets.BudgetError as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    handled = [h for h in budgets.evaluate(conn) if h["budget_id"] == bid]
+                    return self._json(201, {"id": bid, "notifications": handled})
+                if path == "/api/budgets/evaluate":
+                    return self._json(200, {"notifications": budgets.evaluate(conn)})
                 if path == "/api/pins":
                     title = data.get("title")
                     if not isinstance(title, str) or not 0 < len(title.strip()) <= 120:
@@ -177,6 +208,11 @@ def make_handler(db_path: str, source_label: str):
 
             def route(conn):
                 self._body()  # enforces JSON content type + same origin
+                mb = re.match(r"^/api/budgets/(\d+)$", path)
+                if mb:
+                    if not budgets.delete(conn, int(mb.group(1))):
+                        raise ApiError(404, "Budget not found")
+                    return self._json(200, {"deleted": int(mb.group(1))})
                 m = re.match(r"^/api/pins/(\d+)$", path)
                 if not m:
                     raise ApiError(404, "Not found")

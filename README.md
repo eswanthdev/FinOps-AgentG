@@ -1,4 +1,4 @@
-# CostLens (working name) — Visualization module, first slice
+# CostLens (working name) — v0.2: Visualize, Anomalies, Budgets & forecasting
 
 An evidence-backed FinOps agent for AWS. The product has three pillars:
 
@@ -6,7 +6,9 @@ An evidence-backed FinOps agent for AWS. The product has three pillars:
 |---|---|
 | **Visualize** — ask a cost question, get an adjustable Cost Explorer-style dashboard | **Implemented (local, synthetic data)** |
 | **Optimize** — Cost Optimization Engineer: find, validate and plan savings | Planned (next phase). The UI shows it as "Next" and does nothing. |
-| **Govern** — budgets, alerts, approved guardrails (e.g. SCP proposals) | Planned (later phase). |
+| **Govern** — approved guardrails and enforcement (e.g. SCP proposals) | Planned (later phase). |
+| **Anomalies** — unusual cost increases, with drivers and likely owner | **Implemented (local, synthetic data)** |
+| **Budgets & forecasting** — plain-English budgets, run-rate forecasts, email alerts | **Implemented (local, synthetic data)**. Budgets live in CostLens, not in AWS Budgets. |
 
 > **Everything you see in the demo is synthetic data.** No AWS account, credential or API is used anywhere.
 > The app labels itself "Synthetic data" and "Deterministic mode" on every screen.
@@ -38,6 +40,40 @@ python -m costlens serve --db ./my.sqlite --port 8765
 - Untagged spend by account last month
 - Cost by service in July (shows the *missing data* state)
 - How can I optimize EC2? (explains that this is the next module)
+- Any cost anomalies in the last 90 days?
+- Forecast prod-data cost for this month
+- Set up a monthly budget of $5,000 for prod-data and alert ops@example.com at 80% and 100%, and when the forecast crosses 100%
+
+## Anomalies
+
+Daily cost per account + service is compared with the median of the previous 14 days. A day is flagged when
+the excess is at least the largest of 3 × robust spread (1.4826 × MAD), 20% of expected, and $10. Consecutive
+days form one anomaly. Each anomaly shows impact, first-day actual vs expected, peak, a chart, resource-level
+drivers, a likely owner (team tag, else account), and can be acknowledged, dismissed or reopened. Only increases
+are flagged. On the demo data it finds exactly the two planted cases.
+
+## Budgets, forecasts and alert emails
+
+- Describe a budget in plain English (on the Budgets page or in chat). You get an editable preview first;
+  nothing is saved until you press **Create budget**.
+- Supports monthly, quarterly and yearly budgets in USD; scope by account, service, region, team/env/app tag or
+  untagged; alert levels on actual or forecasted spend; up to 10 email recipients.
+- Forecast = actual so far + average of the last 7 days × days left, with a low–high range and a confidence
+  label. It is an estimate; the method is shown on every forecast.
+- Each alert fires at most once per budget period. Unsent or failed alerts are retried on the next check.
+- **Email**: by default alerts go to the in-app **Alert outbox** and are *not sent*. To send real email, set:
+
+  ```bash
+  export COSTLENS_SMTP_HOST=email-smtp.ap-south-1.amazonaws.com   # any SMTP relay, e.g. Amazon SES SMTP
+  export COSTLENS_SMTP_FROM=finops-alerts@yourcompany.com
+  export COSTLENS_SMTP_USERNAME=...   # from your SMTP provider; never put these in code or chat
+  export COSTLENS_SMTP_PASSWORD=...
+  # optional: COSTLENS_SMTP_PORT (587), COSTLENS_SMTP_STARTTLS (true)
+  ```
+
+  Real delivery has been tested only against a fake SMTP server in the test suite, not a real one.
+- Alerts are checked when budgets are created, after each ingestion, and with **Check alerts now**.
+  There is no background scheduler yet.
 
 ## What works (implemented and tested)
 
@@ -65,7 +101,8 @@ python -m costlens serve --db ./my.sqlite --port 8765
 - Any real AWS access (S3, Athena, Cost Explorer, Cost Optimization Hub, Compute Optimizer, etc.).
   `S3ExportSource` exists only as a documented interface and raises `NotImplementedError`.
 - Any AI model. `COSTLENS_MODEL_PROVIDER` is read only to say that model mode is not implemented.
-- Forecasting, anomaly detection, budgets, alerts, optimization findings, action plans, approvals.
+- Optimization findings, action plans, approvals, governance enforcement (SCPs).
+- Real AWS Budgets, scheduled alert checks, anomaly email subscriptions, seasonality-aware forecasts.
 - Multi-user login, tenant isolation beyond "one database file per tenant", encryption at rest.
 - Real AWS Data Exports manifest format: the fixture manifest is our own documented contract
   (see docs/DATA_CONTRACTS.md); a mapping adapter is needed for the real one.
@@ -73,7 +110,7 @@ python -m costlens serve --db ./my.sqlite --port 8765
 ## Tests
 
 ```bash
-python -m pytest -q                      # 100 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 138 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

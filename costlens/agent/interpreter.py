@@ -262,10 +262,12 @@ class DeterministicInterpreter:
                 message="Finding and validating savings is the job of the Cost Optimization Engineer, which is the "
                         "next module. For now I can show where the money goes, so you know where to look.",
                 suggestions=["Top 10 resources by cost last month", "Why did costs increase in October compared to September?"])
-        if re.search(r"\b(budgets?|scps?|guardrails?|block|enforce|policy|policies|governance|limit spend)\b", text):
+        if re.search(r"\b(scps?|guardrails?|block|enforce|policy|policies|governance|limit spend|budgets?)\b", text):
             return Interpretation(
                 "unsupported", module="govern",
-                message="Budgets and guardrails belong to the Governance module, planned after optimization.",
+                message="Guardrails and policy enforcement (for example SCPs) belong to the Governance module, "
+                        "planned after optimization. Budgets and alerts are available now: try “set up a monthly "
+                        "budget of $5,000 for prod-data and alert ops@example.com at 80%”.",
                 suggestions=["Show cost by account this month", "Daily cost by team for the last 30 days"])
 
         understood: list[str] = []
