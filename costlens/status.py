@@ -11,6 +11,7 @@ SOURCES = [
     ("cur2", "CUR 2.0 (Data Exports)", "Cost and usage line items"),
     ("coh", "Cost Optimization Hub", "Savings recommendations (needed by Optimize module)"),
     ("compute_optimizer", "Compute Optimizer", "Rightsizing evidence"),
+    ("organizations", "AWS Organizations", "Accounts, OUs and existing SCPs (needed for guardrail drafts)"),
     ("storage_lens", "S3 Storage Lens", "Storage usage evidence"),
     ("trusted_advisor", "Trusted Advisor", "Checks and idle resources"),
     ("cost_explorer", "Cost Explorer API", "Forecasts and RI/SP utilisation"),
@@ -42,6 +43,8 @@ def data_status(conn, source_label: str | None = None) -> dict:
             rows = opt["coh_rows"] if key == "coh" else opt["co_rows"]
             state = "connected" if rows else "no_data"
             detail = f"{'Synthetic local' if mode == 'synthetic' else 'Local'} snapshot {opt['execution_id']} · {rows} rows"
+        elif key == "organizations" and get_meta(conn, "org_structure"):
+            state, detail = "connected", f"{'Synthetic local' if mode == 'synthetic' else 'Local'} organization file"
         else:
             state, detail = "not_connected", "Not connected in this release"
         sources.append({"key": key, "name": name, "purpose": purpose, "state": state, "detail": detail})

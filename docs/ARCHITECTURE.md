@@ -36,9 +36,12 @@
 
 ## Agent design
 
-- **Orchestrator**: routes a request to a worker. Active workers: `visualization`, `optimize`, `anomalies`, `budgets`
-  (budget, savings, anomaly and forecast requests are routed before the cost interpreter). `PLANNED_WORKERS` lists
-  `govern` so the UI can show it honestly; it has no code path.
+- **Orchestrator**: routes a request to a worker. Active workers: `visualization`, `optimize`, `govern`, `anomalies`,
+  `budgets` (budget, governance, savings, anomaly and forecast requests are routed before the cost interpreter).
+  `PLANNED_WORKERS` is empty today.
+- **Governance pipeline** (`agent/govern.py`): four workers with fixed tool allow-lists. Policy check evaluates typed
+  policies through a `CostQuery`; impact simulates a guardrail on billing data and links Optimize findings; risk adds
+  risks and limits; guardrail drafting writes JSON as text. No code path applies anything.
 - **Optimization pipeline** (`agent/optimize.py`): five workers, each with a fixed tool allow-list. Data quality
   checks the snapshot and the evidence; investigation reads CUR through a typed `CostQuery`; optimization estimates,
   deduplicates and sequences commitments; risk sets confidence, risks and limitations; action planning writes
@@ -49,7 +52,7 @@
   the deterministic one, so a model can never run free-form SQL or exceed limits.
 - **Mode labelling**: every response carries `mode: deterministic` and the UI shows "Deterministic mode".
 
-Planned workers for the next phases (interfaces to be added when built): savings verification, governance.
+Planned workers for the next phases (interfaces to be added when built): savings verification.
 
 ## Why these choices
 

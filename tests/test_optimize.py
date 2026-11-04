@@ -439,8 +439,8 @@ def test_running_twice_gives_the_same_result(demo_conn):
     assert a["opportunities"] == b["opportunities"] and a["totals"] == b["totals"]
 
 
-def test_optimize_is_active_and_govern_still_planned():
-    assert "optimize" in ACTIVE_WORKERS and "optimize" not in PLANNED_WORKERS and "govern" in PLANNED_WORKERS
+def test_optimize_is_active():
+    assert "optimize" in ACTIVE_WORKERS and "optimize" not in PLANNED_WORKERS
 
 
 @pytest.mark.parametrize("question", [

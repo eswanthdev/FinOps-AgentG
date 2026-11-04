@@ -1,9 +1,8 @@
 """Orchestrator and specialist workers.
 
-Implemented now: the Visualization worker (cost exploration and variance) and,
-in agent/optimize.py, the Cost Optimization Engineer workers. Governance is
-declared in PLANNED_WORKERS so the UI can show it honestly; it has no
-implementation and is never invoked.
+Implemented now: the Visualization worker (cost exploration and variance) here,
+the Cost Optimization Engineer workers in agent/optimize.py and the Governance
+workers in agent/govern.py. PLANNED_WORKERS lists anything declared but not built.
 
 Workers only reach data through bounded, typed tools. In this release no model
 is called: the orchestrator is deterministic code and says so in every reply.
@@ -23,15 +22,16 @@ from ..query.model import CostQuery, QueryError
 from ..store import utc_now
 from .interpreter import DeterministicInterpreter, Interpretation, Vocabulary
 
-PLANNED_WORKERS = {
-    "govern": "Governance: approved guardrails such as SCP proposals and policy enforcement (later phase).",
-}
+PLANNED_WORKERS: dict[str, str] = {}
 ACTIVE_WORKERS = {
     "visualization": "Cost exploration and change analysis",
     "optimize": "Cost Optimization Engineer: validated savings estimates and reviewable plans (read-only, makes no changes)",
+    "govern": "Governance: policy checks and draft guardrails (drafts only, applies nothing)",
     "anomalies": "Deterministic daily anomaly detection",
     "budgets": "Budgets, run-rate forecasts and budget alerts (CostLens budgets, not AWS Budgets)",
 }
+_GOVERN_RE = re.compile(r"\b(scps?|guardrails?|governance|polic(y|ies)|violations?|complian\w*|enforce\w*|limit spend|"
+                        r"(no|without( an?)?) owner|who owns)\b", re.I)
 _REALISED_RE = re.compile(r"\b(reali[sz]ed sav\w*|actual sav\w*|how much (have|did) (we|i) sav\w*)\b", re.I)
 _OPTIMIZE_RE = re.compile(r"\b(optimi[sz]\w*|rightsiz\w*|right-siz\w*|waste\w*|idle|save money|sav\w+ opportunit\w*|"
                           r"how (much )?(can|could|do|should) (we|i|\S+) save|"
@@ -168,6 +168,11 @@ class Orchestrator:
             return {"kind": "budget_list", "worker": "budgets", "budgets": items,
                     "message": f"You have {len(items)} budget{'s' if len(items) != 1 else ''}." if items
                     else "No budgets yet. Describe one in plain English, for example: set up a monthly budget of $5,000 for prod-data."}
+        if _GOVERN_RE.search(text):
+            from . import govern
+            understood: list[str] = []
+            filters = self.interpreter._filters(text.lower(), self.vocabulary(), understood)
+            return govern.answer(self.conn, understood, filters, text)
         realised = bool(_REALISED_RE.search(text))
         if realised or _OPTIMIZE_RE.search(text):
             from . import optimize

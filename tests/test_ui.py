@@ -54,7 +54,7 @@ def test_empty_state_and_synthetic_label(page):
     assert page.locator("#dataPill").is_visible()
     assert "SYNTHETIC" in page.locator(".data-card").inner_text()
     assert page.locator("#sendBtn").is_disabled()
-    assert page.locator(".nav-item.planned").count() == 1  # Govern; Optimize is live
+    assert page.locator(".nav-item.planned").count() == 0  # every module is live
     assert not page.errors
 
 
@@ -296,4 +296,82 @@ def test_optimize_mobile_has_no_horizontal_scroll(browser, app_url):
     d = pg.locator(".opt-detail").first
     expect(d).to_be_visible()
     assert "effort: very low" in d.inner_text()
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 375
+
+
+def open_govern(page):
+    page.click(".nav-item[data-view=govern]")
+    page.wait_for_selector("[data-violation]")
+
+
+def test_govern_page_totals_and_violations(page):
+    expect(page.locator("#governCount")).to_have_text("6")
+    open_govern(page)
+    assert page.locator("#topbarTitle").inner_text() == "Govern"
+    assert "$808.07" in page.locator(".gov-totals").inner_text()
+    assert "recorded, not verified" in page.locator(".gov-totals").inner_text()
+    expect(page.locator("[data-violation]")).to_have_count(6)
+    first = page.locator("[data-violation]").first.inner_text()
+    assert "i-0f0a0001g5" in first and "Limitations" in first
+    assert not page.errors
+
+
+def test_govern_guardrail_workflow_records_but_applies_nothing(page):
+    open_govern(page)
+    page.locator(".opt-tabs button", has_text="Guardrail drafts").click()
+    card = page.locator("[data-guardrail]", has_text="No GPU instances")
+    expect(card).to_contain_text("ec2:RunInstances")
+    for s in ("does not apply this", "Checks", "Rollout", "Rollback", "Management account"):
+        assert s in card.inner_text(), s
+    card.get_by_role("button", name="Send for review").click()
+    card = page.locator("[data-guardrail]", has_text="No GPU instances")
+    expect(card).to_contain_text("In review")
+    card.get_by_role("button", name="Record approval").click()
+    card = page.locator("[data-guardrail]", has_text="No GPU instances")
+    expect(card).to_contain_text("Approved (recorded, not verified)")
+
+
+def test_govern_exception_moves_violation_out_of_open(page):
+    open_govern(page)
+    card = page.locator("[data-violation]").first
+    card.locator("summary", has_text="Add an exception").click()
+    card.get_by_label("Exception owner").fill("data-platform")
+    card.get_by_label("Exception reason").fill("Research project")
+    card.get_by_label("Exception expiry").fill("2026-12-31")
+    card.get_by_role("button", name="Add exception").click()
+    expect(page.locator(".gov-totals")).to_contain_text("1 excepted")
+    expect(page.locator("[data-violation]", has_text="Research project")).to_contain_text("excepted")
+
+
+def test_govern_policy_toggle(page):
+    open_govern(page)
+    page.locator(".opt-tabs button", has_text="Policies").click()
+    card = page.locator("[data-policy=approved-regions]")
+    expect(card).to_contain_text("Compliant")
+    card.get_by_role("button", name="Turn off").click()
+    expect(page.locator("[data-policy=approved-regions]")).to_contain_text("Off")
+
+
+def test_govern_chat_on_page_and_main_chat(page):
+    open_govern(page)
+    page.fill(".gov-chat textarea", "Which spend has no owner?")
+    page.keyboard.press("Enter")
+    expect(page.locator(".opt-answer")).to_contain_text("$808.07")
+    page.click(".nav-item[data-view=chat]")
+    send(page, "Draft a guardrail for GPUs in sandbox")
+    page.wait_for_selector(".msg-body [data-guardrail]")
+    assert "Govern" in page.locator(".module-note").last.inner_text()
+    assert not page.errors
+
+
+def test_govern_mobile_has_no_horizontal_scroll(browser, app_url):
+    pg = browser.new_page(viewport={"width": 375, "height": 800})
+    pg.goto(app_url)
+    pg.wait_for_selector(".suggestion")
+    pg.click("#menuBtn")
+    pg.click(".nav-item[data-view=govern]")
+    pg.wait_for_selector("[data-violation]")
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 375
+    pg.locator(".opt-tabs button", has_text="Guardrail drafts").click()
+    pg.wait_for_selector("[data-guardrail]")
     assert pg.evaluate("document.documentElement.scrollWidth") <= 375

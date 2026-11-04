@@ -265,9 +265,9 @@ class DeterministicInterpreter:
         if re.search(r"\b(scps?|guardrails?|block|enforce|policy|policies|governance|limit spend|budgets?)\b", text):
             return Interpretation(
                 "unsupported", module="govern",
-                message="Guardrails and policy enforcement (for example SCPs) belong to the Governance module, "
-                        "planned after optimization. Budgets and alerts are available now: try “set up a monthly "
-                        "budget of $5,000 for prod-data and alert ops@example.com at 80%”.",
+                message="Guardrails and policies belong to the Govern page, which drafts them for review and applies "
+                        "nothing. For budgets, try “set up a monthly budget of $5,000 for prod-data and alert "
+                        "ops@example.com at 80%”.",
                 suggestions=["Show cost by account this month", "Daily cost by team for the last 30 days"])
 
         understood: list[str] = []

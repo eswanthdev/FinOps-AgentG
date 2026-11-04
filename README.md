@@ -1,4 +1,4 @@
-# CostLens (working name) — v0.3: Visualize, Optimize, Anomalies, Budgets & forecasting
+# CostLens (working name) — v0.4: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting
 
 An evidence-backed FinOps agent for AWS. The product has three pillars:
 
@@ -6,7 +6,7 @@ An evidence-backed FinOps agent for AWS. The product has three pillars:
 |---|---|
 | **Visualize** — ask a cost question, get an adjustable Cost Explorer-style dashboard | **Implemented (local, synthetic data)** |
 | **Optimize** — Cost Optimization Engineer: find, validate and plan savings | **First slice implemented (local, synthetic data, read-only)**. Estimates only; realised savings are not measured. |
-| **Govern** — approved guardrails and enforcement (e.g. SCP proposals) | Planned (later phase). |
+| **Govern** — policy checks and guardrail drafts (SCPs and tag policies) | **First slice implemented (local, synthetic data)**. Drafts only; nothing is applied to AWS. |
 | **Anomalies** — unusual cost increases, with drivers and likely owner | **Implemented (local, synthetic data)** |
 | **Budgets & forecasting** — plain-English budgets, run-rate forecasts, email alerts | **Implemented (local, synthetic data)**. Budgets live in CostLens, not in AWS Budgets. |
 
@@ -43,6 +43,9 @@ python -m costlens serve --db ./my.sqlite --port 8765
 - How much can prod-data save?
 - How can I reduce S3 cost? (no recommendations, so no number)
 - How much have we saved so far? (realised savings: not measured)
+- Which spend has no owner?
+- Draft a guardrail for GPUs in sandbox
+- Show policy violations
 - Any cost anomalies in the last 90 days?
 - Forecast prod-data cost for this month
 - Set up a monthly budget of $5,000 for prod-data and alert ops@example.com at 80% and 100%, and when the forecast crosses 100%
@@ -64,6 +67,23 @@ limitations and, when the evidence allows, a reviewable plan.
 
 On the demo data the counted estimate is $3,272.06 a month, from sources that add up to $5,975.22. "Accept for
 planning" only records a decision. CostLens changes nothing in AWS.
+
+## Govern
+
+Checks four kinds of typed policy against the last 30 days of CUR: required tag, allowed regions, restricted instance
+types and budget coverage. Workers run in order: policy check → impact simulation → risk → guardrail drafting.
+
+- **Violations** show owner, account, spend touched, resources, evidence and limitations. The spend total counts each
+  resource once. On the demo data: 6 open violations touching $808.07.
+- **Guardrail drafts** are SCP or tag policy JSON, shown as text with a copy button. Each one shows its targets, impact,
+  checks, risks, rollout and rollback. Without organization data no draft is written.
+- **Workflow**: Draft → In review → Approved or Rejected. "Approved" only records a decision. There is no login yet, so
+  it is not verified, and it changes nothing in AWS. If a draft changes, it goes back to Draft.
+- **Exceptions** need an owner, a reason and an expiry. An expired exception opens the violation again.
+- Policies come from a local file and can be turned on or off in the app. There is no screen to write new ones yet.
+
+The impact figure is an estimate. CUR shows what was billed, not API calls, and a guardrail blocks new actions only: it
+does not stop what is already running. Drafts pass format and size checks only and have never run in a real organization.
 
 ## Anomalies
 
@@ -125,7 +145,9 @@ are flagged. On the demo data it finds exactly the two planted cases.
   have not been tested against real files.
 - Any AI model. `COSTLENS_MODEL_PROVIDER` is read only to say that model mode is not implemented.
 - Savings verification (realised savings), Compute Optimizer evidence for anything except EC2 (so RDS findings stay
-  "needs evidence"), approvals, governance enforcement (SCPs).
+  "needs evidence").
+- Any enforcement: CostLens never applies an SCP or tag policy. Real approvals with identity need SSO. AWS Budgets
+  actions are not drafted, because budgets live in CostLens and not in AWS Budgets.
 - Real AWS Budgets, scheduled alert checks, anomaly email subscriptions, seasonality-aware forecasts.
 - Multi-user login, tenant isolation beyond "one database file per tenant", encryption at rest.
 - Real AWS Data Exports manifest format: the fixture manifest is our own documented contract
@@ -134,7 +156,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 224 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 316 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

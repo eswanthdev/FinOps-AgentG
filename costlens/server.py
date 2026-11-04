@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import anomalies, budgets, notify
-from .agent import optimize
+from .agent import govern, optimize
 from .agent.orchestrator import ACTIVE_WORKERS, Orchestrator, PLANNED_WORKERS, model_mode
 from .query import engine
 from .query.model import CostQuery, QueryError
@@ -27,7 +27,7 @@ from .store import connect, utc_now
 
 WEB_DIR = Path(__file__).parent / "web"
 STATIC = {"app.js": "text/javascript", "styles.css": "text/css", "charts.js": "text/javascript", "features.js": "text/javascript",
-          "optimize.js": "text/javascript"}
+          "optimize.js": "text/javascript", "govern.js": "text/javascript"}
 MAX_BODY = 64 * 1024
 _HOST_RE = re.compile(r"^(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$")
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -139,6 +139,8 @@ def make_handler(db_path: str, source_label: str):
                     return self._json(200, anomalies.summary(conn))
                 if path == "/api/optimize":
                     return self._json(200, optimize.summary(conn))
+                if path == "/api/govern":
+                    return self._json(200, govern.summary(conn))
                 if path == "/api/budgets":
                     return self._json(200, {"budgets": budgets.list_status(conn), "outbox": budgets.outbox(conn),
                                             "email": notify.describe(), "forecast": budgets.org_forecast(conn)})
@@ -188,6 +190,33 @@ def make_handler(db_path: str, source_label: str):
                         raise ApiError(400, str(exc)) from exc
                     orch.audit.record("optimize.status", {"id": m.group(1), "status": data.get("status")})
                     return self._json(200, {"id": m.group(1), "status": data.get("status")})
+                m = re.match(r"^/api/govern/guardrails/([0-9a-f]{16})$", path)
+                if m:
+                    try:
+                        result = govern.set_guardrail_status(conn, m.group(1), str(data.get("status", "")), str(data.get("note", "")))
+                    except ValueError as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    orch.audit.record("govern.guardrail", {"id": m.group(1), "status": result["status"]})
+                    return self._json(200, result)
+                m = re.match(r"^/api/govern/violations/([0-9a-f]{16})/exception$", path)
+                if m:
+                    try:
+                        result = govern.add_exception(conn, m.group(1), str(data.get("owner", "")), str(data.get("reason", "")),
+                                                      str(data.get("expires_on", "")))
+                    except ValueError as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    orch.audit.record("govern.exception", {"id": m.group(1), "expires_on": result["expires_on"]})
+                    return self._json(201, result)
+                m = re.match(r"^/api/govern/policies/([a-z0-9-]{1,63})$", path)
+                if m:
+                    if not isinstance(data.get("enabled"), bool):
+                        raise ApiError(400, "enabled must be true or false")
+                    try:
+                        govern.set_policy_enabled(conn, m.group(1), data["enabled"])
+                    except ValueError as exc:
+                        raise ApiError(404, str(exc)) from exc
+                    orch.audit.record("govern.policy", {"id": m.group(1), "enabled": data["enabled"]})
+                    return self._json(200, {"id": m.group(1), "enabled": data["enabled"]})
                 if path == "/api/budgets/parse":
                     text = data.get("text")
                     if not isinstance(text, str):

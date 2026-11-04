@@ -444,12 +444,53 @@ def generate_optimization(root: str | Path) -> Path:
     return target
 
 
+GOV_FOLDER = "governance"
+
+
+def organization() -> dict:
+    """Synthetic organization: the management account holds no workloads."""
+    return {
+        "schemaVersion": "org-subset-v1", "syntheticData": True, "managementAccount": PAYER,
+        "organizationalUnits": [
+            {"id": "ou-prod", "name": "Production", "accounts": ["210987654321", "310987654321"]},
+            {"id": "ou-nonprod", "name": "Non-production", "accounts": ["410987654321"]},
+            {"id": "ou-sandbox", "name": "Sandbox", "accounts": ["510987654321"]},
+        ],
+        "serviceControlPolicies": [
+            {"id": "p-fullaccess", "name": "FullAWSAccess", "targets": ["root"]},
+            {"id": "p-denyleave", "name": "DenyLeaveOrganization", "targets": ["ou-prod", "ou-sandbox"]},
+        ],
+    }
+
+
+def policies() -> dict:
+    return {"schemaVersion": "policy-subset-v1", "policies": [
+        {"id": "team-tag", "name": "Every resource has a team tag", "kind": "required_tag", "params": {"key": "user:team"}},
+        {"id": "approved-regions", "name": "Only approved regions", "kind": "allowed_regions",
+         "params": {"regions": ["us-east-1", "ap-south-1", "eu-west-1"]}},
+        {"id": "no-gpu-sandbox", "name": "No GPU instances in sandbox", "kind": "restricted_instance",
+         "params": {"accounts": ["510987654321"], "families": ["g4dn", "g5", "g6", "p4d", "p5"]}},
+        {"id": "budget-every-account", "name": "Every account has a budget", "kind": "budget_coverage", "params": {}},
+    ]}
+
+
+def generate_governance(root: str | Path) -> Path:
+    """Add the synthetic organization and policies to a fixture folder, if they are not there yet."""
+    target = Path(root) / GOV_FOLDER
+    if not target.exists():
+        target.mkdir(parents=True)
+        (target / "organization.json").write_text(json.dumps(organization(), indent=2) + "\n", encoding="utf-8")
+        (target / "policies.json").write_text(json.dumps(policies(), indent=2) + "\n", encoding="utf-8")
+    return target
+
+
 def generate(root: str | Path, *, overwrite: bool = False) -> Path:
     root = Path(root)
     if root.exists() and any(root.iterdir()):
         if not overwrite:
             if (root / "SYNTHETIC_FIXTURES").exists():
                 generate_optimization(root)  # fixture folders made before Optimize existed
+                generate_governance(root)
             return root
         if not (root / "SYNTHETIC_FIXTURES").exists():
             raise RuntimeError(f"refusing to overwrite {root}: not a fixture folder created by this tool")
@@ -475,4 +516,5 @@ def generate(root: str | Path, *, overwrite: bool = False) -> Path:
     _write_delivery(root, "007-2026-11-incomplete", "2026-11", "exec-2026-11-b", "2026-11-03T09:00:00Z",
                     nov_rows, complete=False, drop_file=True)
     generate_optimization(root)
+    generate_governance(root)
     return root

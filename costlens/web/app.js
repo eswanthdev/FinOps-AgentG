@@ -104,15 +104,16 @@
   // ------------------------------------------------------------ views
   function showView(v) {
     state.view = v;
-    ["chat", "dashboards", "data", "optimize", "anomalies", "budgets"].forEach(x => { $("view-" + x).hidden = x !== v; });
+    ["chat", "dashboards", "data", "optimize", "govern", "anomalies", "budgets"].forEach(x => { $("view-" + x).hidden = x !== v; });
     document.querySelectorAll(".nav-item[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === v));
     $("topbarTitle").textContent = { chat: "Visualize", dashboards: "Saved dashboards", data: "Data & coverage",
-                                     optimize: "Optimize", anomalies: "Anomalies", budgets: "Budgets & forecasting" }[v];
+                                     optimize: "Optimize", govern: "Govern", anomalies: "Anomalies", budgets: "Budgets & forecasting" }[v];
     $("app").classList.remove("nav-open");
     C.hideTip();
     if (v === "dashboards") renderDashboards();
     if (v === "data") renderDataPage();
     if (v === "optimize") window.CostLensOptimize.render();
+    if (v === "govern") window.CostLensGovern.render();
     if (v === "anomalies") window.CostLensFeatures.renderAnomalies();
     if (v === "budgets") window.CostLensFeatures.renderBudgets();
     if (v === "chat") $("question").focus();
@@ -177,10 +178,11 @@
 
   function renderAssistant(body, resp) {
     if (resp.kind === "optimize") { window.CostLensOptimize.renderChat(body, resp); followups(body, resp.suggestions); return; }
+    if (resp.kind === "govern") { window.CostLensGovern.renderChat(body, resp); followups(body, resp.suggestions); return; }
     if (resp.kind) { window.CostLensFeatures.renderChatSpecial(body, resp); followups(body, resp.suggestions); return; }
     const it = resp.interpretation;
     if (it.status !== "ok") {
-      if (it.module && it.module !== "visualize") body.appendChild(h("div", { class: "module-note", text: (it.module === "optimize" ? "Optimize" : "Govern") + " · not in this release" }));
+      if (it.module && it.module !== "visualize") body.appendChild(h("div", { class: "module-note", text: it.module === "optimize" ? "Optimize" : "Govern" }));
       body.appendChild(h("p", { class: "msg-text", text: resp.message }));
       followups(body, resp.suggestions);
       return;
@@ -524,6 +526,7 @@
     refreshPinCount();
     window.CostLensFeatures.refreshCounts();
     window.CostLensOptimize.refreshCount();
+    window.CostLensGovern.refreshCount();
     $("question").focus();
   }
   async function openQuery(query, label) {

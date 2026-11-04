@@ -21,9 +21,15 @@
 | Email header injection blocked (CR/LF stripped from subjects); recipients validated, max 10 | `notify.py`, `budgets.py` |
 | Optimize is read-only: no AWS calls, plans are text; status changes and pipeline runs are audited | `agent/optimize.py`, `server.py` |
 | Optimization workers have fixed tool allow-lists; snapshot rows are validated, bounded and all-or-nothing | `agent/optimize.py`, `ingest/optimization.py` |
+| Govern is draft-only: guardrails are text, no AWS client exists, and a test checks the code imports none | `agent/govern.py`, `test_govern.py` |
+| Policies are typed with a fixed set of kinds; unknown fields are rejected and bad files change nothing | `ingest/governance.py` |
+| Guardrail status changes, exceptions and policy on/off are audited; an approved draft that changes loses its approval | `agent/govern.py`, `server.py` |
 | Audit retention purge on server start (`COSTLENS_AUDIT_RETENTION_DAYS`, default 90) | `store.purge_audit` |
 
 ## Designed, not implemented
+
+- **Verified approvals**: "Approved" in Govern records a decision only. With no login, anyone using the local app can
+  record it. Real sign-off needs SSO, roles and separation of duties.
 
 - **Alert recipients**: today any valid address can be added. Production needs a verified-domain allow-list
   and recipient confirmation, so the tool cannot be used to email arbitrary people.

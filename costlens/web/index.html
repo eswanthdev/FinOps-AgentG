@@ -10,6 +10,7 @@
 <script src="/static/app.js" defer></script>
 <script src="/static/features.js" defer></script>
 <script src="/static/optimize.js" defer></script>
+<script src="/static/govern.js" defer></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -27,7 +28,7 @@
       <div class="nav-label">Modules</div>
       <button class="nav-item active" data-view="chat" type="button"><span class="dot dot-live"></span>Visualize</button>
       <button class="nav-item" data-view="optimize" type="button"><span class="dot dot-live"></span>Optimize<span class="count" id="optimizeCount"></span></button>
-      <div class="nav-item planned" aria-disabled="true" title="Later phase: guardrails and policy enforcement"><span class="dot"></span>Govern<span class="pill-mini">Planned</span></div>
+      <button class="nav-item" data-view="govern" type="button"><span class="dot dot-live"></span>Govern<span class="count alert-count" id="governCount"></span></button>
       <button class="nav-item" data-view="anomalies" type="button"><span class="dot dot-live"></span>Anomalies<span class="count alert-count" id="anomalyCount"></span></button>
       <button class="nav-item" data-view="budgets" type="button"><span class="dot dot-live"></span>Budgets &amp; forecasting<span class="count" id="budgetCount"></span></button>
       <div class="nav-label">Workspace</div>
@@ -88,6 +89,10 @@
 
     <section class="view view-optimize" id="view-optimize" hidden>
       <div class="page" id="optimizePage"></div>
+    </section>
+
+    <section class="view view-govern" id="view-govern" hidden>
+      <div class="page" id="governPage"></div>
     </section>
 
     <section class="view view-anomalies" id="view-anomalies" hidden>

@@ -162,6 +162,33 @@ CREATE TABLE IF NOT EXISTS opt_states (
     note TEXT NOT NULL DEFAULT '',
     updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS gov_policies (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    params_json TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gov_exceptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    violation_id TEXT NOT NULL,
+    owner TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    expires_on TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_gov_exceptions ON gov_exceptions(violation_id);
+
+CREATE TABLE IF NOT EXISTS gov_guardrail_states (
+    guardrail_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    draft_sha TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
 """
 
 

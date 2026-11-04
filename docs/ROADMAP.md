@@ -45,6 +45,11 @@ locally. Remaining: test against real exports, Compute Optimizer evidence beyond
 
 ## Stage 5 — Governance
 
+First slice done on synthetic data, brought ahead of Stage 4 by decision: typed policies, violations, impact
+simulation, SCP and tag policy drafts, a recorded approval workflow and exceptions. Draft only; nothing is enforced.
+Remaining: a screen to write policies, real AWS Organizations data, AWS Budgets actions (need real AWS Budgets),
+verified approvals (need SSO, Stage 6).
+
 - Budgets and alerts per account/team/service; anomaly alerts.
 - Guardrail proposals: AWS Budgets actions that apply an SCP or IAM policy when a threshold is crossed.
   The agent drafts; a human approves before anything is enforced. Automatic enforcement only after

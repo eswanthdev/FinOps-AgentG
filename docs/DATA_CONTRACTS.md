@@ -163,3 +163,46 @@ recommendationOptions_1_migrationEffort, lookbackPeriodInDays, lastRefreshTimest
 | Source cost differs from CUR by more than 10% | confidence falls to low; for a commitment baseline, needs evidence |
 | Stop | needs peak CPU of 10% or less |
 | Rightsize, Stop, ScaleIn, Graviton | need an OVER_PROVISIONED Compute Optimizer row |
+
+## 7. Organization and policies (local source)
+
+```
+<root>/governance/
+  organization.json
+  policies.json
+```
+
+**Synthetic, and our own contract.** The organization file is not an AWS export. A real adapter would build it from
+AWS Organizations, and that needs separate approval. A bad file is rejected whole and the previous data is kept.
+
+### organization.json (schemaVersion `org-subset-v1`)
+
+| Field | Type | Meaning |
+|---|---|---|
+| managementAccount | 12 digits | SCPs have no effect on it |
+| organizationalUnits | list of `{id, name, accounts}` | `id` like `ou-sandbox`; an account appears once |
+| serviceControlPolicies | list of `{id, name, targets}` | existing SCPs; a target is `root`, an OU id or an account |
+
+### policies.json (schemaVersion `policy-subset-v1`)
+
+Each policy is `{id, name, kind, params}`. Unknown fields are rejected. There is no free-form logic.
+
+| kind | params | Violation | Draft |
+|---|---|---|---|
+| required_tag | `key` | Usage rows without the tag | Tag policy |
+| allowed_regions | `regions` | Usage outside the list (`global` is ignored) | SCP |
+| restricted_instance | `accounts`, `families` | `BoxUsage` of those families | SCP |
+| budget_coverage | none | Account with no budget covering all its spend | None |
+
+### Governance rules
+
+| Rule | Value |
+|---|---|
+| Evidence window | last 30 days of CUR, amortized cost |
+| Spend total | each resource once; budget coverage left out |
+| SCP size limit | 5,120 bytes |
+| Tag policy size limit | 2,500 bytes |
+| SCPs per target | 5 |
+| Exception | needs owner, reason, expiry within 365 days; active through its expiry date |
+
+The AWS limits above were written from memory of the AWS documentation. Confirm them before any real use.

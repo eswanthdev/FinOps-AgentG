@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from . import fixtures
+from .ingest.governance import load_governance
 from .ingest.loader import ingest_source
 from .ingest.optimization import ingest_optimization
 from .ingest.sources import LocalDirectorySource, SourceUnavailable
@@ -29,6 +30,7 @@ def _ingest(db: Path, source: Path, synthetic: bool) -> list:
     try:
         outcomes = ingest_source(conn, LocalDirectorySource(source))
         outcomes += ingest_optimization(conn, source / fixtures.OPT_FOLDER)
+        outcomes += load_governance(conn, source / fixtures.GOV_FOLDER)
         if synthetic:
             set_meta(conn, "data_mode", "synthetic")
             set_meta(conn, "reference_date", fixtures.REFERENCE_DATE.isoformat())
