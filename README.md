@@ -52,8 +52,8 @@ read them as a starting point. Follow-up questions see only the previous query, 
 
 ## Hosting on AWS
 
-Prepared, **not deployed and not validated by AWS**. See [deploy/aws/RUNBOOK.md](deploy/aws/RUNBOOK.md). The target is the
-synthetic demo for one team: one private EC2 server behind an HTTPS load balancer with Cognito login. The app has no
+**Deployed** in `eu-central-1` at https://costlens.cloudaip.com, with synthetic data only. See
+[deploy/aws/RUNBOOK.md](deploy/aws/RUNBOOK.md). One team, one private EC2 server behind an HTTPS load balancer with Cognito login. The app has no
 login of its own, so it refuses a non-local address unless `COSTLENS_BEHIND_AUTH_PROXY=true` and
 `COSTLENS_ALLOWED_HOSTS` are set. Only set these when a login proxy really is the only way in.
 
@@ -202,7 +202,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 481 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 482 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

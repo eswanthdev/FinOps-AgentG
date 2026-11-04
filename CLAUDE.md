@@ -1,7 +1,7 @@
 # CostLens (working name)
 
 Evidence-backed FinOps agent for AWS. Original product; do not copy any other vendor's code, branding, wording or screens.
-Everything runs locally on synthetic CUR 2.0 fixtures. No real AWS access. "Deterministic mode" is the default; the Bedrock investigator is optional and has never run live.
+Everything uses synthetic CUR 2.0 fixtures, locally and on the hosted demo. The app reads no real billing data. "Deterministic mode" is the default; the Bedrock investigator is optional and has never run live.
 
 ## Run and test
 
@@ -11,7 +11,7 @@ Needs Python 3.11+. Standard library only at runtime.
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens demo --scenario savings --reset-db   # separate demo with billing after recorded changes
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 481 passed
+python -m pytest -q                              # expected: 482 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 
@@ -30,7 +30,7 @@ Do not edit tests just to make them pass.
 - `costlens/agent/verify.py` - savings verification: change records, baseline, attribution, result states.
 - `costlens/agent/govern.py` - Governance workers, guardrail drafts, workflow, exceptions. `costlens/ingest/governance.py` - organization file and typed policies.
 - `costlens/anomalies.py`, `budgets.py`, `notify.py` (outbox by default, SMTP via env vars).
-- `costlens/hosting.py`, `Dockerfile`, `deploy/aws/` - settings and files for the hosted demo. Prepared, never deployed. Follow `deploy/aws/RUNBOOK.md`; every AWS step needs approval.
+- `costlens/hosting.py`, `Dockerfile`, `deploy/aws/` - settings and files for the hosted demo, deployed at https://costlens.cloudaip.com (stack `costlens-demo`, profile `costlens-demo`). Follow `deploy/aws/RUNBOOK.md`; every AWS step needs approval.
 - `costlens/server.py` - localhost HTTP API + static UI in `costlens/web/` (plain JS/HTML/CSS).
 - Docs: `docs/ARCHITECTURE.md`, `DATA_CONTRACTS.md`, `SECURITY.md`, `ROADMAP.md`. Read them before changing anything.
 

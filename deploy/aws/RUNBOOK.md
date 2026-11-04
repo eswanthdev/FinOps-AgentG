@@ -1,7 +1,7 @@
 # Hosting the synthetic demo on AWS
 
-**Status: written, not run.** These templates have never been deployed or validated by AWS, and the image has never been
-built. Expect to fix small things on the first run. **Synthetic data only.** Do not load real billing data on this setup.
+**Status: deployed once from this runbook.** The live model call is still unproven. **Synthetic data only.** Do not load
+real billing data on this setup.
 
 Every step below creates or changes paid AWS resources. Each one needs explicit approval first. Do not put credentials
 in code or chat: sign in on your own machine with `aws sso login`.
@@ -25,6 +25,7 @@ aws cloudformation deploy --region eu-central-1 --stack-name costlens-ecr --temp
 ## 3. Build and push the image
 
 Tags are immutable, so use a new tag for every build, such as the short commit id. Build for `linux/amd64`.
+On Windows, run the login below in Git Bash: Windows PowerShell 5.1 pipes broke it with a 400 error.
 
 ```bash
 aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.eu-central-1.amazonaws.com
