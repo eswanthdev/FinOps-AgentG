@@ -11,6 +11,7 @@
   function pill(cls, text) { return el("span", { class: "status-pill st-" + cls, text }); }
   function list(items) { return el("ul", {}, items.map(t => el("li", { text: t }))); }
   function statusPill(s) { return pill("opt_" + s, s); }
+  function effortText(e) { return e.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase(); }
 
   async function refreshCount() {
     try {
@@ -58,7 +59,7 @@
     if (f.status !== "dismissed") buttons.push(el("button", { class: "btn", type: "button", text: "Dismiss", onclick: setStatus(f, "dismissed") }));
     if (f.status !== "open") buttons.push(el("button", { class: "btn", type: "button", text: "Reopen", onclick: setStatus(f, "open") }));
     return el("div", { class: "opt-detail", "data-detail": f.id },
-      el("p", { class: "muted", text: `${f.change} · ${f.account} · ${f.region} · source: ${f.source} · effort: ${f.effort}` }),
+      el("p", { class: "muted", text: `${f.change} · ${f.account} · ${f.region} · source: ${f.source} · effort: ${effortText(f.effort)}` }),
       f.overlaps.length && f.phase === "alternative" ? el("div", { class: "notice neutral", text: "This competes with another recommendation on the same resource. Only one can be done, so this one is not counted." }) : null,
       section("Evidence", el("dl", {}, f.evidence.map(e => [el("dt", { text: e.label }), el("dd", { text: e.value })])),
         el("p", { class: "muted", text: `Time range: ${U().fmtDate(f.time_range.start)} – ${U().fmtDate(f.time_range.end)}` })),
@@ -76,11 +77,11 @@
     items.forEach(f => {
       const row = el("tr", { class: "clickable", "data-opportunity": f.id, tabindex: "0", "aria-expanded": String(local.open.has(f.id)) },
         el("td", {}, el("div", { class: "opt-title", text: f.title }), el("div", { class: "muted", text: f.account })),
-        el("td", { text: f.owner, title: f.owner_source }),
-        el("td", {}, pill(f.phase, f.phase_label)),
-        el("td", {}, statusPill(f.status)),
-        el("td", { class: "num", text: f.monthly_savings_display }),
-        el("td", {}, pill("conf_" + f.confidence, f.confidence)));
+        el("td", { text: f.owner, title: f.owner_source, "data-label": "Owner" }),
+        el("td", { "data-label": "Phase" }, pill(f.phase, f.phase_label)),
+        el("td", { "data-label": "Status" }, statusPill(f.status)),
+        el("td", { class: "num", text: f.monthly_savings_display, "data-label": "Monthly estimate" }),
+        el("td", { "data-label": "Confidence" }, pill("conf_" + f.confidence, f.confidence)));
       const open = el("tr", { hidden: !local.open.has(f.id) }, el("td", { colspan: "6" }, detail(f)));
       const toggle = () => {
         open.hidden = !open.hidden;

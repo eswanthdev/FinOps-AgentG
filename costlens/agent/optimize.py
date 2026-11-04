@@ -565,7 +565,7 @@ class OptimizationPipeline:
             self.planning.call("plan", f=f, cand=sources[f["id"]])
             f["phase_label"] = PHASES[f["phase"]]
         order = {"plan_ready": 0, "conditional": 1, "proposal": 2, "alternative": 3, "needs_evidence": 4}
-        findings.sort(key=lambda f: (f["status"] == "dismissed", order[f["phase"]], -f["claim_nanos"], f["id"]))
+        findings.sort(key=lambda f: (f["status"] == "dismissed", order[f["phase"]], -f["claim_nanos"], f["resource_id"], f["id"]))
         AuditLog(self.conn).record("optimize.run", {"state": "ok", "findings": len(findings), "tools": self.trace})
         return {
             "state": "ok", "snapshot": snapshot, "opportunities": findings, "totals": _totals(findings),

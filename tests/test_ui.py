@@ -284,3 +284,16 @@ def test_optimize_mobile_has_no_horizontal_scroll(browser, app_url):
     pg.click(".nav-item[data-view=optimize]")
     pg.wait_for_selector("[data-opportunity]")
     assert pg.evaluate("document.documentElement.scrollWidth") <= 375
+    # The key columns must be readable without swiping sideways.
+    assert pg.evaluate("(() => { const w = document.querySelector('.opt-table').closest('.tbl-wrap'); return w.scrollWidth <= w.clientWidth; })()")
+    row = pg.locator("[data-opportunity]").first
+    for label in ("Monthly estimate", "Confidence", "Phase", "Status"):
+        cell = row.locator(f"td[data-label='{label}']")
+        assert cell.is_visible()
+        assert cell.bounding_box()["x"] + cell.bounding_box()["width"] <= 375
+    assert pg.locator(".opt-detail:visible").count() == 0  # detail rows stay closed until tapped
+    row.click()
+    d = pg.locator(".opt-detail").first
+    expect(d).to_be_visible()
+    assert "effort: very low" in d.inner_text()
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 375

@@ -10,7 +10,7 @@ Needs Python 3.11+. Standard library only at runtime.
 ```bash
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 223 passed
+python -m pytest -q                              # expected: 224 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 

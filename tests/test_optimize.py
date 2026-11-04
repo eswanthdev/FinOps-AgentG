@@ -328,6 +328,11 @@ def test_every_finding_has_the_required_fields(demo_conn):
             assert "estimate" in plan["expected_benefit"].lower()
 
 
+def test_equal_savings_sort_by_resource(demo_conn):
+    ids = [f["resource_id"] for f in optimize.summary(demo_conn)["opportunities"] if f["claim_nanos"] == usd("248.20") and f["counted"]]
+    assert len(ids) == 8 and ids == sorted(ids)
+
+
 def test_owner_comes_from_tag_else_account(demo_conn):
     f = by_rec(optimize.summary(demo_conn))
     assert f["coh-etl-0"]["owner"] == "data-platform"

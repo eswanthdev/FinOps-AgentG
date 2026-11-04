@@ -134,7 +134,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 223 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 224 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 
