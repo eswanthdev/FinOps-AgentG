@@ -104,14 +104,15 @@
   // ------------------------------------------------------------ views
   function showView(v) {
     state.view = v;
-    ["chat", "dashboards", "data", "anomalies", "budgets"].forEach(x => { $("view-" + x).hidden = x !== v; });
+    ["chat", "dashboards", "data", "optimize", "anomalies", "budgets"].forEach(x => { $("view-" + x).hidden = x !== v; });
     document.querySelectorAll(".nav-item[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === v));
     $("topbarTitle").textContent = { chat: "Visualize", dashboards: "Saved dashboards", data: "Data & coverage",
-                                     anomalies: "Anomalies", budgets: "Budgets & forecasting" }[v];
+                                     optimize: "Optimize", anomalies: "Anomalies", budgets: "Budgets & forecasting" }[v];
     $("app").classList.remove("nav-open");
     C.hideTip();
     if (v === "dashboards") renderDashboards();
     if (v === "data") renderDataPage();
+    if (v === "optimize") window.CostLensOptimize.render();
     if (v === "anomalies") window.CostLensFeatures.renderAnomalies();
     if (v === "budgets") window.CostLensFeatures.renderBudgets();
     if (v === "chat") $("question").focus();
@@ -122,7 +123,7 @@
     ["Breakdown", "Show cost by service for last month"],
     ["Investigate", "Why did costs increase in October compared to September?"],
     ["Trend", "Daily EC2 cost by account for the last 30 days"],
-    ["Ownership", "Top 5 teams by amortized cost this month"],
+    ["Optimize", "How can I reduce EC2 cost?"],
     ["Anomalies", "Any cost anomalies in the last 90 days?"],
     ["Budget", "Set up a monthly budget of $5,000 for prod-data and alert ops@example.com at 80% and 100%"],
   ];
@@ -175,6 +176,7 @@
   }
 
   function renderAssistant(body, resp) {
+    if (resp.kind === "optimize") { window.CostLensOptimize.renderChat(body, resp); followups(body, resp.suggestions); return; }
     if (resp.kind) { window.CostLensFeatures.renderChatSpecial(body, resp); followups(body, resp.suggestions); return; }
     const it = resp.interpretation;
     if (it.status !== "ok") {
@@ -521,6 +523,7 @@
     try { state.dims = await api("/api/dimensions"); } catch (e) { state.dims = null; }
     refreshPinCount();
     window.CostLensFeatures.refreshCounts();
+    window.CostLensOptimize.refreshCount();
     $("question").focus();
   }
   async function openQuery(query, label) {

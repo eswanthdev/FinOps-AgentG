@@ -6,7 +6,7 @@ from datetime import date
 from .query import engine
 from .store import get_meta
 
-# Sources the product will use. Only CUR 2.0 is ingested in this release.
+# Sources the product will use. CUR 2.0, Cost Optimization Hub and Compute Optimizer are read from local files.
 SOURCES = [
     ("cur2", "CUR 2.0 (Data Exports)", "Cost and usage line items"),
     ("coh", "Cost Optimization Hub", "Savings recommendations (needed by Optimize module)"),
@@ -31,12 +31,17 @@ def data_status(conn, source_label: str | None = None) -> dict:
     data_through = cov["data_through"]
     lag_days = (ref - date.fromisoformat(data_through)).days if data_through else None
     accounts = engine.account_names(conn)
+    opt = conn.execute("SELECT execution_id, coh_rows, co_rows FROM opt_deliveries WHERE status='active'").fetchone()
     sources = []
     for key, name, purpose in SOURCES:
         if key == "cur2":
             state = "connected" if active else "no_data"
             detail = (f"{source_label or 'local folder'} · {len(active)} billing period(s) loaded"
                       if active else "No deliveries ingested yet")
+        elif key in ("coh", "compute_optimizer") and opt:
+            rows = opt["coh_rows"] if key == "coh" else opt["co_rows"]
+            state = "connected" if rows else "no_data"
+            detail = f"{'Synthetic local' if mode == 'synthetic' else 'Local'} snapshot {opt['execution_id']} · {rows} rows"
         else:
             state, detail = "not_connected", "Not connected in this release"
         sources.append({"key": key, "name": name, "purpose": purpose, "state": state, "detail": detail})

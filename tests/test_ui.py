@@ -54,7 +54,7 @@ def test_empty_state_and_synthetic_label(page):
     assert page.locator("#dataPill").is_visible()
     assert "SYNTHETIC" in page.locator(".data-card").inner_text()
     assert page.locator("#sendBtn").is_disabled()
-    assert page.locator(".nav-item.planned").count() == 2
+    assert page.locator(".nav-item.planned").count() == 1  # Govern; Optimize is live
     assert not page.errors
 
 
@@ -204,3 +204,83 @@ def test_chat_budget_and_forecast(page):
     send(page, "Forecast prod-data cost for this month")
     page.wait_for_selector("text=Forecast · November 2026")
     assert not page.errors
+
+
+def open_optimize(page):
+    page.click(".nav-item[data-view=optimize]")
+    page.wait_for_selector("[data-opportunity]")
+
+
+def test_optimize_page_list_and_totals(page):
+    expect(page.locator("#optimizeCount")).to_have_text("14")
+    open_optimize(page)
+    assert page.locator("#topbarTitle").inner_text() == "Optimize"
+    totals = page.locator(".opt-totals").inner_text()
+    assert "$3,272.06" in totals and "Not measured" in totals and "not a savings number" in totals
+    heads = page.locator(".opt-table thead").inner_text()
+    for h in ("Owner", "Phase", "Status", "Monthly estimate", "Confidence"):
+        assert h.lower() in heads.lower()
+    assert "Plan ready (14)" in page.locator(".opt-tabs").inner_text()
+    assert not page.errors
+
+
+def test_optimize_finding_detail_shows_evidence_and_plan(page):
+    open_optimize(page)
+    page.locator("[data-opportunity]").first.click()
+    d = page.locator(".opt-detail").first
+    expect(d).to_be_visible()
+    t = d.inner_text()
+    for s in ("Evidence", "Time range", "Calculation", "Risks", "Limitations", "Action plan", "Prerequisites",
+              "Validation", "Rollback", "Not measured"):
+        assert s in t, s
+
+
+def test_optimize_needs_evidence_tab_has_no_number(page):
+    open_optimize(page)
+    page.locator(".opt-tabs button", has_text="Needs evidence").click()
+    expect(page.locator("[data-opportunity]")).to_have_count(5)
+    assert "Not estimated" in page.locator(".opt-table").inner_text()
+    page.locator("[data-opportunity]").first.click()
+    assert "Next step" in page.locator(".opt-detail").first.inner_text()
+
+
+def test_optimize_dismiss_changes_total(page):
+    open_optimize(page)
+    page.locator("[data-opportunity]").first.click()
+    page.locator(".opt-detail").first.get_by_role("button", name="Dismiss").click()
+    expect(page.locator(".opt-totals")).to_contain_text("$2,537.68")
+    page.locator(".opt-tabs button", has_text="Dismissed").click()
+    expect(page.locator("[data-opportunity]")).to_have_count(1)
+
+
+def test_optimize_chat_on_page(page):
+    open_optimize(page)
+    page.fill(".opt-chat textarea", "How can I reduce EC2 cost?")
+    page.keyboard.press("Enter")
+    page.wait_for_selector(".opt-answer .card")
+    assert "estimate" in page.locator(".opt-answer").inner_text().lower()
+    page.fill(".opt-chat textarea", "How can I reduce S3 cost?")
+    page.get_by_role("button", name="Ask", exact=True).click()
+    expect(page.locator(".opt-answer")).to_contain_text("no recommendations")
+
+
+def test_optimize_from_main_chat_and_evidence_link(page):
+    send(page, "How can I reduce EC2 cost?")
+    page.wait_for_selector(".msg-body .module-note")
+    page.get_by_role("button", name="in Optimize").click()
+    page.wait_for_selector("[data-opportunity]")
+    page.locator("[data-opportunity]").first.click()
+    page.locator(".opt-detail").first.get_by_role("button", name="Open evidence in Visualize").click()
+    page.wait_for_selector(".card .chart-wrap svg")
+    assert page.locator("#topbarTitle").inner_text() == "Visualize"
+    assert not page.errors
+
+
+def test_optimize_mobile_has_no_horizontal_scroll(browser, app_url):
+    pg = browser.new_page(viewport={"width": 375, "height": 800})
+    pg.goto(app_url)
+    pg.wait_for_selector(".suggestion")
+    pg.click("#menuBtn")
+    pg.click(".nav-item[data-view=optimize]")
+    pg.wait_for_selector("[data-opportunity]")
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 375

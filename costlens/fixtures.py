@@ -18,6 +18,9 @@ Built-in cost stories (useful for demos and tests):
     Gateway data processing jumps at the same time.
   * sandbox has an untagged g5.xlarge GPU instance running since 20 Sep.
   * prod-commerce has a Compute Savings Plan covering 4 m6i.xlarge instances.
+
+An optimization/ subfolder holds one synthetic Cost Optimization Hub and Compute
+Optimizer snapshot tied to the same resources. See docs/DATA_CONTRACTS.md.
 """
 from __future__ import annotations
 
@@ -282,10 +285,171 @@ def _write_delivery(root: Path, folder: str, period: str, execution_id: str, exp
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
+OPT_FOLDER = "optimization"
+HOURS_PER_MONTH = _d(730)
+_REFRESHED = "2026-11-02T03:00:00Z"
+
+
+def _monthly(rate: str) -> str:
+    return str(_d(rate) * HOURS_PER_MONTH)
+
+
+def _ec2_arn(account: str, region: str, instance: str) -> str:
+    return f"arn:aws:ec2:{region}:{account}:instance/{instance}"
+
+
+def _coh_row(rec_id: str, account: str, region: str, arn: str, action: str, current_type: str, current: str,
+             recommended_type: str, recommended: str, cost_before: str, cost_after: str, savings_before: str,
+             savings_after: str, *, source: str = "ComputeOptimizer", effort: str = "Low", restart: bool = True,
+             rollback: bool = True, lookback: int = 14, details: dict | None = None) -> dict:
+    return {
+        "recommendation_id": rec_id, "account_id": account, "region": region, "resource_arn": arn,
+        "action_type": action, "currency_code": "USD", "current_resource_type": current_type,
+        "current_resource_summary": current, "recommended_resource_type": recommended_type,
+        "recommended_resource_summary": recommended,
+        "recommended_resource_details": json.dumps(details or {}, sort_keys=True),
+        "recommendation_source": source,
+        "estimated_monthly_cost_before_discount": cost_before, "estimated_monthly_cost_after_discount": cost_after,
+        "estimated_monthly_savings_before_discount": savings_before,
+        "estimated_monthly_savings_after_discount": savings_after,
+        "implementation_effort": effort, "restart_needed": str(restart).lower(),
+        "rollback_possible": str(rollback).lower(), "recommendation_lookback_period_in_days": str(lookback),
+        "last_refresh_timestamp": _REFRESHED,
+    }
+
+
+def _rightsize(rec_id: str, account: str, region: str, instance: str, current: str, target: str,
+               rate: str, target_rate: str, *, after_rate: str | None = None, after_target: str | None = None) -> dict:
+    """On-demand values by default. after_* are the discounted rates of a Savings Plan covered instance."""
+    before = _d(rate) - _d(target_rate)
+    after = _d(after_rate) - _d(after_target) if after_rate else before
+    return _coh_row(rec_id, account, region, _ec2_arn(account, region, instance), "Rightsize", "Ec2Instance", current,
+                    "Ec2Instance", target, _monthly(rate), _monthly(after_rate or rate),
+                    str(before * HOURS_PER_MONTH), str(after * HOURS_PER_MONTH))
+
+
+def coh_rows() -> list[dict]:
+    """Synthetic Cost Optimization Hub rows. Each one exercises a rule in agent/optimize.py."""
+    pc, pd, st, sb = "210987654321", "310987654321", "410987654321", "510987654321"
+    east = "us-east-1"
+    rows = []
+    # m6i fleet: 0-3 are Savings Plan covered (conflict), 4-5 are on demand (clean).
+    for i in range(4):
+        rows.append(_rightsize(f"coh-m6i-{i}", pc, east, f"i-0c0a{i:04d}m6i", "m6i.xlarge", "m6i.large",
+                               "0.192", "0.096", after_rate="0.1344", after_target="0.0672"))
+    for i in (4, 5):
+        rows.append(_rightsize(f"coh-m6i-{i}", pc, east, f"i-0c0a{i:04d}m6i", "m6i.xlarge", "m6i.large", "0.192", "0.096"))
+    # ETL fleet: launched 15 Oct, so short history; memory metric is missing in Compute Optimizer.
+    for i in range(8):
+        rows.append(_rightsize(f"coh-etl-{i}", pd, east, f"i-0d0e{i:04d}c6i", "c6i.4xlarge", "c6i.2xlarge", "0.680", "0.340"))
+    # Same instances as coh-etl-0/1: a mutually exclusive alternative.
+    for i in (0, 1):
+        rows.append(_coh_row(f"coh-etl-grav-{i}", pd, east, _ec2_arn(pd, east, f"i-0d0e{i:04d}c6i"), "MigrateToGraviton",
+                             "Ec2Instance", "c6i.4xlarge", "Ec2Instance", "c7g.4xlarge", _monthly("0.680"),
+                             _monthly("0.680"), _monthly("0.100"), _monthly("0.100"), effort="Medium"))
+    rows.append(_rightsize("coh-r6i-0", pd, east, "i-0d0a0000r6i", "r6i.2xlarge", "r6i.xlarge", "0.504", "0.252"))
+    rows.append(_coh_row("coh-g5-stop", sb, east, _ec2_arn(sb, east, "i-0f0a0001g5"), "Stop", "Ec2Instance", "g5.xlarge",
+                         "Ec2Instance", "Stopped", _monthly("1.006"), _monthly("1.006"), _monthly("1.006"),
+                         _monthly("1.006"), effort="VeryLow", restart=False))
+    rows.append(_coh_row("coh-ebs-gp3", st, "eu-west-1", f"arn:aws:ec2:eu-west-1:{st}:volume/vol-stg-pool", "Upgrade",
+                         "EbsVolume", "gp2, 2000 GiB", "EbsVolume", "gp3, 2000 GiB", "220.00", "220.00", "44.00", "44.00",
+                         source="CostOptimizationHub", restart=False))
+    # Not enough evidence, each for a different reason.
+    rows.append(_rightsize("coh-t3-conflict", st, "eu-west-1", "i-0e0a0000t3", "t3.large", "t3.medium", "0.0912", "0.0456"))
+    rows.append(_coh_row("coh-rds-prod", pc, east, f"arn:aws:rds:{east}:{pc}:db:db-checkout-prod", "Rightsize",
+                         "RdsDbInstance", "db.r6g.xlarge Multi-AZ", "RdsDbInstance", "db.r6g.large Multi-AZ",
+                         _monthly("0.904"), _monthly("0.904"), _monthly("0.452"), _monthly("0.452"), effort="Medium"))
+    rows.append(_rightsize("coh-gone", pd, east, "i-0d0e9999gone", "c6i.4xlarge", "c6i.2xlarge", "0.680", "0.340"))
+    rows.append(_coh_row("coh-t3-overclaim", sb, east, _ec2_arn(sb, east, "i-0f0b0000t3"), "Stop", "Ec2Instance", "t3.medium",
+                         "Ec2Instance", "Stopped", "300.00", "300.00", "300.00", "300.00", effort="VeryLow", restart=False))
+    rows.append(_coh_row("coh-t3-short", sb, east, _ec2_arn(sb, east, "i-0f0b0001t3"), "Stop", "Ec2Instance", "t3.medium",
+                         "Ec2Instance", "Stopped", _monthly("0.0416"), _monthly("0.0416"), _monthly("0.0416"),
+                         _monthly("0.0416"), effort="VeryLow", restart=False, lookback=3))
+    # Commitment: sized on today's on-demand usage in prod-data, before any rightsizing.
+    rows.append(_coh_row("coh-sp-data", pd, east, "", "PurchaseSavingsPlans", "ComputeSavingsPlans", "On-demand compute",
+                         "ComputeSavingsPlans", "$5.00/hour, 1 year, No upfront", "5069.12", "3650.00", "1419.12", "1419.12",
+                         source="CostExplorer", effort="VeryLow", restart=False, rollback=False, lookback=30,
+                         details={"hourlyCommitment": "5.00", "paymentOption": "NoUpfront", "term": "OneYear"}))
+    return rows
+
+
+def _co_row(account: str, region: str, instance: str, finding: str, current: str, price: str, cpu: str, memory: str,
+            target: str = "", risk: str = "", savings: str = "0", effort: str = "") -> dict:
+    return {
+        "accountId": account, "instanceArn": _ec2_arn(account, region, instance), "finding": finding,
+        "currentInstanceType": current, "currentOnDemandPrice": price, "utilizationMetrics_CPU_MAXIMUM": cpu,
+        "utilizationMetrics_MEMORY_MAXIMUM": memory, "recommendationOptions_1_instanceType": target,
+        "recommendationOptions_1_performanceRisk": risk,
+        "recommendationOptions_1_estimatedMonthlySavings_value": savings if target else "",
+        "recommendationOptions_1_estimatedMonthlySavings_currency": "USD" if target else "",
+        "recommendationOptions_1_migrationEffort": effort, "lookbackPeriodInDays": "14",
+        "lastRefreshTimestamp": _REFRESHED,
+    }
+
+
+def co_rows() -> list[dict]:
+    """Synthetic Compute Optimizer EC2 rows: the utilisation evidence behind the recommendations."""
+    pc, pd, st, sb = "210987654321", "310987654321", "410987654321", "510987654321"
+    east = "us-east-1"
+    over = "OVER_PROVISIONED"
+    rows = [_co_row(pc, east, f"i-0c0a{i:04d}m6i", over, "m6i.xlarge", "0.192", "31.5", "42.0", "m6i.large", "1.0",
+                    _monthly("0.096"), "VeryLow") for i in range(6)]
+    rows += [_co_row(pd, east, f"i-0d0e{i:04d}c6i", over, "c6i.4xlarge", "0.680", "38.2", "", "c6i.2xlarge", "2.0",
+                     _monthly("0.340"), "Low") for i in range(8)]
+    rows.append(_co_row(pd, east, "i-0d0a0000r6i", over, "r6i.2xlarge", "0.504", "29.0", "44.0", "r6i.xlarge", "1.0",
+                        _monthly("0.252"), "Low"))
+    # No matching Cost Optimization Hub row: a Compute Optimizer-only opportunity, with high performance risk.
+    rows.append(_co_row(pd, east, "i-0d0a0001r6i", over, "r6i.2xlarge", "0.504", "47.5", "61.0", "r6i.xlarge", "3.0",
+                        _monthly("0.252"), "Medium"))
+    rows.append(_co_row(pd, east, "i-0d0a0002r6i", "OPTIMIZED", "r6i.2xlarge", "0.504", "71.0", "78.0"))
+    rows.append(_co_row(st, "eu-west-1", "i-0e0a0000t3", "OPTIMIZED", "t3.large", "0.0912", "64.0", "70.0"))
+    rows.append(_co_row(sb, east, "i-0f0a0001g5", over, "g5.xlarge", "1.006", "2.1", "3.4", "g4dn.xlarge", "1.0",
+                        _monthly("0.480"), "Low"))
+    rows.append(_co_row(sb, east, "i-0f0b0000t3", over, "t3.medium", "0.0416", "3.0", "9.0", "t3.small", "1.0",
+                        _monthly("0.0208"), "VeryLow"))
+    rows.append(_co_row(sb, east, "i-0f0b0001t3", over, "t3.medium", "0.0416", "4.0", "8.0", "t3.small", "1.0",
+                        _monthly("0.0208"), "VeryLow"))
+    return rows
+
+
+def write_optimization_snapshot(root: str | Path, folder: str, execution_id: str, exported: str,
+                                coh: list[dict] | None, co: list[dict] | None) -> Path:
+    """Write one snapshot folder. Pass None to leave a table out of the snapshot."""
+    from .ingest.optimization import CO_COLUMNS, COH_COLUMNS, OPT_SCHEMA_VERSION
+    out = Path(root) / folder
+    out.mkdir(parents=True, exist_ok=True)
+    files = []
+    for key, table, columns, rows in (("coh-recommendations.csv", "coh", COH_COLUMNS, coh),
+                                      ("compute-optimizer-ec2.csv", "compute_optimizer_ec2", CO_COLUMNS, co)):
+        if rows is None:
+            continue
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=list(columns), lineterminator="\n")
+        w.writeheader()
+        w.writerows(rows)
+        data = buf.getvalue().encode("utf-8")
+        (out / key).write_bytes(data)
+        files.append({"key": key, "sha256": hashlib.sha256(data).hexdigest(), "rowCount": len(rows), "table": table})
+    manifest = {"schemaVersion": OPT_SCHEMA_VERSION, "syntheticData": True, "executionId": execution_id,
+                "exportTimestamp": exported, "dataFiles": files}
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return out
+
+
+def generate_optimization(root: str | Path) -> Path:
+    """Add the synthetic optimization snapshot to a fixture folder, if it is not there yet."""
+    target = Path(root) / OPT_FOLDER
+    if not target.exists():
+        write_optimization_snapshot(target, "001-2026-11-02", "opt-2026-11-02", "2026-11-02T06:00:00Z", coh_rows(), co_rows())
+    return target
+
+
 def generate(root: str | Path, *, overwrite: bool = False) -> Path:
     root = Path(root)
     if root.exists() and any(root.iterdir()):
         if not overwrite:
+            if (root / "SYNTHETIC_FIXTURES").exists():
+                generate_optimization(root)  # fixture folders made before Optimize existed
             return root
         if not (root / "SYNTHETIC_FIXTURES").exists():
             raise RuntimeError(f"refusing to overwrite {root}: not a fixture folder created by this tool")
@@ -310,4 +474,5 @@ def generate(root: str | Path, *, overwrite: bool = False) -> Path:
                     nov_rows, complete=False)
     _write_delivery(root, "007-2026-11-incomplete", "2026-11", "exec-2026-11-b", "2026-11-03T09:00:00Z",
                     nov_rows, complete=False, drop_file=True)
+    generate_optimization(root)
     return root

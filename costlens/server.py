@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import anomalies, budgets, notify
+from .agent import optimize
 from .agent.orchestrator import ACTIVE_WORKERS, Orchestrator, PLANNED_WORKERS, model_mode
 from .query import engine
 from .query.model import CostQuery, QueryError
@@ -25,7 +26,8 @@ from .status import data_status
 from .store import connect, utc_now
 
 WEB_DIR = Path(__file__).parent / "web"
-STATIC = {"app.js": "text/javascript", "styles.css": "text/css", "charts.js": "text/javascript", "features.js": "text/javascript"}
+STATIC = {"app.js": "text/javascript", "styles.css": "text/css", "charts.js": "text/javascript", "features.js": "text/javascript",
+          "optimize.js": "text/javascript"}
 MAX_BODY = 64 * 1024
 _HOST_RE = re.compile(r"^(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$")
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -135,6 +137,8 @@ def make_handler(db_path: str, source_label: str):
                     return self._json(200, s)
                 if path == "/api/anomalies":
                     return self._json(200, anomalies.summary(conn))
+                if path == "/api/optimize":
+                    return self._json(200, optimize.summary(conn))
                 if path == "/api/budgets":
                     return self._json(200, {"budgets": budgets.list_status(conn), "outbox": budgets.outbox(conn),
                                             "email": notify.describe(), "forecast": budgets.org_forecast(conn)})
@@ -175,6 +179,14 @@ def make_handler(db_path: str, source_label: str):
                     except ValueError as exc:
                         raise ApiError(400, str(exc)) from exc
                     orch.audit.record("anomaly.status", {"id": m.group(1), "status": data.get("status")})
+                    return self._json(200, {"id": m.group(1), "status": data.get("status")})
+                m = re.match(r"^/api/optimize/([0-9a-f]{16})$", path)
+                if m:
+                    try:
+                        optimize.set_status(conn, m.group(1), str(data.get("status", "")), str(data.get("note", "")))
+                    except ValueError as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    orch.audit.record("optimize.status", {"id": m.group(1), "status": data.get("status")})
                     return self._json(200, {"id": m.group(1), "status": data.get("status")})
                 if path == "/api/budgets/parse":
                     text = data.get("text")

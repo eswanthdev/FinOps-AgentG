@@ -99,3 +99,67 @@ Four accounts under payer `110987654321`: prod-commerce, prod-data, staging, san
 July 2026 is intentionally missing. Built-in stories: prod-data ETL fleet (8 × c6i.4xlarge) and NAT data
 processing jump from 15 Oct; an untagged sandbox GPU instance since 20 Sep; a Compute Savings Plan in
 prod-commerce; a September revision with a −$250 credit.
+
+## 6. Optimization snapshot (local source)
+
+```
+<root>/optimization/001-2026-11-02/
+  manifest.json
+  coh-recommendations.csv
+  compute-optimizer-ec2.csv
+```
+
+**Synthetic. Column names are a subset of the real AWS exports, written from the documented schemas. They have not
+been tested against real files.** A real adapter must be tested before we claim support.
+
+### manifest.json (schemaVersion `opt-subset-v1`)
+
+| Field | Type | Meaning |
+|---|---|---|
+| schemaVersion | string | must be `opt-subset-v1` |
+| syntheticData | bool | true for generated fixtures (informational) |
+| executionId | string | unique per snapshot; same id + same content = duplicate |
+| exportTimestamp | `YYYY-MM-DDTHH:MM:SSZ` | newer timestamp wins |
+| dataFiles | list of `{key, sha256, rowCount, table}` | `table` is `coh` or `compute_optimizer_ec2`; each at most once; at most 5,000 rows |
+
+A snapshot is a point-in-time view: a newer one replaces the previous one completely. Outcomes match section 3
+(`active`, `superseded`, `duplicate`, `stale`, `rejected_*`). One bad row rejects the whole snapshot and keeps the
+previous one.
+
+### Cost Optimization Hub columns (`table: coh`)
+
+`recommendation_id, account_id, region, resource_arn, action_type, currency_code, current_resource_type,
+current_resource_summary, recommended_resource_type, recommended_resource_summary, recommended_resource_details,
+recommendation_source, estimated_monthly_cost_before_discount, estimated_monthly_cost_after_discount,
+estimated_monthly_savings_before_discount, estimated_monthly_savings_after_discount, implementation_effort,
+restart_needed, rollback_possible, recommendation_lookback_period_in_days, last_refresh_timestamp`
+
+- `action_type`: Rightsize, Stop, Delete, Upgrade, MigrateToGraviton, ScaleIn, PurchaseSavingsPlans, PurchaseReservedInstances.
+- `implementation_effort`: VeryLow, Low, Medium, High, VeryHigh.
+- Money: decimal strings, USD only, never negative. Parsed once to integer nano-USD.
+- `resource_arn` is empty for commitments. `recommended_resource_details` is a JSON object; for a commitment it holds
+  `hourlyCommitment`, `term` and `paymentOption`.
+
+### Compute Optimizer EC2 columns (`table: compute_optimizer_ec2`)
+
+`accountId, instanceArn, finding, currentInstanceType, currentOnDemandPrice, utilizationMetrics_CPU_MAXIMUM,
+utilizationMetrics_MEMORY_MAXIMUM, recommendationOptions_1_instanceType, recommendationOptions_1_performanceRisk,
+recommendationOptions_1_estimatedMonthlySavings_value, recommendationOptions_1_estimatedMonthlySavings_currency,
+recommendationOptions_1_migrationEffort, lookbackPeriodInDays, lastRefreshTimestamp`
+
+- `finding`: OVER_PROVISIONED, UNDER_PROVISIONED, OPTIMIZED.
+- `currentOnDemandPrice` is per hour. Savings are on demand, before any discount.
+- An empty memory metric means memory was not measured. Performance risk runs from 0 to 4.
+
+### Evidence rules
+
+| Rule | Value |
+|---|---|
+| Evidence window | last 30 days of CUR |
+| Monthly run-rate | amortized cost x 730 / (days with usage x 24) |
+| Minimum recommendation lookback | 14 days, else needs evidence |
+| Snapshot older than 14 days | confidence falls to low |
+| Source savings above run-rate | needs evidence |
+| Source cost differs from CUR by more than 10% | confidence falls to low; for a commitment baseline, needs evidence |
+| Stop | needs peak CPU of 10% or less |
+| Rightsize, Stop, ScaleIn, Graviton | need an OVER_PROVISIONED Compute Optimizer row |

@@ -9,6 +9,7 @@
 <script src="/static/charts.js" defer></script>
 <script src="/static/app.js" defer></script>
 <script src="/static/features.js" defer></script>
+<script src="/static/optimize.js" defer></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -25,7 +26,7 @@
     <nav class="nav">
       <div class="nav-label">Modules</div>
       <button class="nav-item active" data-view="chat" type="button"><span class="dot dot-live"></span>Visualize</button>
-      <div class="nav-item planned" aria-disabled="true" title="Next phase: find, validate and plan savings"><span class="dot"></span>Optimize<span class="pill-mini">Next</span></div>
+      <button class="nav-item" data-view="optimize" type="button"><span class="dot dot-live"></span>Optimize<span class="count" id="optimizeCount"></span></button>
       <div class="nav-item planned" aria-disabled="true" title="Later phase: guardrails and policy enforcement"><span class="dot"></span>Govern<span class="pill-mini">Planned</span></div>
       <button class="nav-item" data-view="anomalies" type="button"><span class="dot dot-live"></span>Anomalies<span class="count alert-count" id="anomalyCount"></span></button>
       <button class="nav-item" data-view="budgets" type="button"><span class="dot dot-live"></span>Budgets &amp; forecasting<span class="count" id="budgetCount"></span></button>
@@ -83,6 +84,10 @@
         </div>
         <div class="pin-grid" id="pinGrid"></div>
       </div>
+    </section>
+
+    <section class="view view-optimize" id="view-optimize" hidden>
+      <div class="page" id="optimizePage"></div>
     </section>
 
     <section class="view view-anomalies" id="view-anomalies" hidden>

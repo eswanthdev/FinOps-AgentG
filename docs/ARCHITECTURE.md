@@ -36,17 +36,20 @@
 
 ## Agent design
 
-- **Orchestrator**: routes a request to a worker. Active workers: `visualization`, `anomalies`, `budgets`
-  (budget requests, budget lists and forecasts are routed before the cost interpreter). `PLANNED_WORKERS` lists
-  `optimize` and `govern` so the UI can show them honestly; they have no code path.
+- **Orchestrator**: routes a request to a worker. Active workers: `visualization`, `optimize`, `anomalies`, `budgets`
+  (budget, savings, anomaly and forecast requests are routed before the cost interpreter). `PLANNED_WORKERS` lists
+  `govern` so the UI can show it honestly; it has no code path.
+- **Optimization pipeline** (`agent/optimize.py`): five workers, each with a fixed tool allow-list. Data quality
+  checks the snapshot and the evidence; investigation reads CUR through a typed `CostQuery`; optimization estimates,
+  deduplicates and sequences commitments; risk sets confidence, risks and limitations; action planning writes
+  reviewable plans. The Optimize page and chat share this pipeline, so their numbers match.
 - **Workers**: own a small set of typed tools. The visualization worker has `query_costs` and `data_coverage`.
 - **Interpreter protocol**: `interpret(question, vocab, today, previous) -> Interpretation`. A model-backed
   interpreter must return the same structure. Its output is validated by `CostQuery.validate()` exactly like
   the deterministic one, so a model can never run free-form SQL or exceed limits.
 - **Mode labelling**: every response carries `mode: deterministic` and the UI shows "Deterministic mode".
 
-Planned workers for the next phases (interfaces to be added when built): data quality, cost investigation,
-optimization, risk, action planning, savings verification, governance.
+Planned workers for the next phases (interfaces to be added when built): savings verification, governance.
 
 ## Why these choices
 

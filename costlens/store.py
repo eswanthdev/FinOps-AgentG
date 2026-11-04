@@ -99,6 +99,69 @@ CREATE TABLE IF NOT EXISTS pins (
     query_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS opt_deliveries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source_uri TEXT NOT NULL,
+    execution_id TEXT NOT NULL,
+    export_timestamp TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    status TEXT NOT NULL,
+    detail TEXT NOT NULL DEFAULT '',
+    coh_rows INTEGER NOT NULL DEFAULT 0,
+    co_rows INTEGER NOT NULL DEFAULT 0,
+    ingested_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS coh_recommendations (
+    delivery_id INTEGER NOT NULL REFERENCES opt_deliveries(id),
+    recommendation_id TEXT PRIMARY KEY,
+    account_id TEXT NOT NULL,
+    region TEXT NOT NULL,
+    resource_arn TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    current_resource_type TEXT NOT NULL,
+    current_summary TEXT NOT NULL,
+    recommended_resource_type TEXT NOT NULL,
+    recommended_summary TEXT NOT NULL,
+    recommended_details TEXT NOT NULL,
+    source TEXT NOT NULL,
+    cost_before_nanos INTEGER NOT NULL,
+    cost_after_nanos INTEGER NOT NULL,
+    savings_before_nanos INTEGER NOT NULL,
+    savings_after_nanos INTEGER NOT NULL,
+    effort TEXT NOT NULL,
+    restart_needed INTEGER NOT NULL,
+    rollback_possible INTEGER NOT NULL,
+    lookback_days INTEGER NOT NULL,
+    last_refresh TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS co_ec2_recommendations (
+    delivery_id INTEGER NOT NULL REFERENCES opt_deliveries(id),
+    instance_arn TEXT PRIMARY KEY,
+    resource_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    finding TEXT NOT NULL,
+    current_type TEXT NOT NULL,
+    current_on_demand_nanos INTEGER NOT NULL,
+    cpu_max TEXT NOT NULL,
+    memory_max TEXT NOT NULL,
+    recommended_type TEXT NOT NULL,
+    performance_risk TEXT NOT NULL,
+    savings_nanos INTEGER NOT NULL,
+    migration_effort TEXT NOT NULL,
+    lookback_days INTEGER NOT NULL,
+    last_refresh TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS opt_states (
+    finding_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
 """
 
 

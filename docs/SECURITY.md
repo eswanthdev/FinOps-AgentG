@@ -19,6 +19,8 @@
 | Budget creation needs explicit confirmation; budget, alert and anomaly-status changes are audited | `budgets.py`, `server.py` |
 | SMTP credentials read only from environment variables; never stored, logged, returned or shown | `notify.py` |
 | Email header injection blocked (CR/LF stripped from subjects); recipients validated, max 10 | `notify.py`, `budgets.py` |
+| Optimize is read-only: no AWS calls, plans are text; status changes and pipeline runs are audited | `agent/optimize.py`, `server.py` |
+| Optimization workers have fixed tool allow-lists; snapshot rows are validated, bounded and all-or-nothing | `agent/optimize.py`, `ingest/optimization.py` |
 | Audit retention purge on server start (`COSTLENS_AUDIT_RETENTION_DAYS`, default 90) | `store.purge_audit` |
 
 ## Designed, not implemented

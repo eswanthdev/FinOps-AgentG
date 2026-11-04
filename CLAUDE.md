@@ -10,11 +10,12 @@ Needs Python 3.11+. Standard library only at runtime.
 ```bash
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 138 passed
+python -m pytest -q                              # expected: 223 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 
 UI tests need Playwright and Chrome/Chromium (`COSTLENS_CHROME=/path/to/chrome`); they skip otherwise.
+On Windows the variable is always needed, because the tests cannot find Chrome by themselves.
 Do not edit tests just to make them pass.
 
 ## Architecture (see docs/ARCHITECTURE.md)
@@ -23,13 +24,14 @@ Do not edit tests just to make them pass.
 - `costlens/store.py` - SQLite (deliveries, line_items, accounts, pins, audit).
 - `costlens/query/model.py` - `CostQuery`, the only query shape. `query/engine.py` runs it (explore, variance, coverage).
 - `costlens/agent/` - `interpreter.py` (deterministic text -> CostQuery), `orchestrator.py` (routes to workers; per-worker tool allow-list; audit).
+- `costlens/agent/optimize.py` - Cost Optimization Engineer workers and savings rules. `costlens/ingest/optimization.py` - COH and Compute Optimizer snapshots.
 - `costlens/anomalies.py`, `budgets.py`, `notify.py` (outbox by default, SMTP via env vars).
 - `costlens/server.py` - localhost HTTP API + static UI in `costlens/web/` (plain JS/HTML/CSS).
 - Docs: `docs/ARCHITECTURE.md`, `DATA_CONTRACTS.md`, `SECURITY.md`, `ROADMAP.md`. Read them before changing anything.
 
 ## Build order
 
-Visualize (done) -> Cost Optimization Engineer (next) -> Governance (later).
+Visualize (done) -> Cost Optimization Engineer (first slice done) -> Governance (later).
 Also done: Anomalies, Budgets & forecasting.
 Sidebar order: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting.
 
@@ -48,7 +50,7 @@ Sidebar order: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting.
 
 - Do not create or change AWS resources, IAM roles, billing exports or paid services. No AWS API call without separate, explicit user approval.
 - Never ask the user to paste credentials, secrets or tokens into chat or code. SMTP and AWS settings come only from environment variables.
-- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/visualization-slice`).
+- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/optimize-slice`).
 - Do not delete or overwrite existing work. Ask before any destructive action.
 - Do not install new third-party packages without asking.
 - Be honest about what is implemented, tested, simulated, or only planned. Never present estimates as real savings.

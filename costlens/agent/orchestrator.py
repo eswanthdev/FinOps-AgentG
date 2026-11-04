@@ -1,9 +1,9 @@
 """Orchestrator and specialist workers.
 
-Implemented now: the Visualization worker (cost exploration and variance).
-Planned workers (Optimization, Risk, Action planning, Savings verification,
-Governance) are declared in PLANNED_WORKERS so the UI can show them honestly;
-they have no implementation and are never invoked.
+Implemented now: the Visualization worker (cost exploration and variance) and,
+in agent/optimize.py, the Cost Optimization Engineer workers. Governance is
+declared in PLANNED_WORKERS so the UI can show it honestly; it has no
+implementation and is never invoked.
 
 Workers only reach data through bounded, typed tools. In this release no model
 is called: the orchestrator is deterministic code and says so in every reply.
@@ -24,14 +24,18 @@ from ..store import utc_now
 from .interpreter import DeterministicInterpreter, Interpretation, Vocabulary
 
 PLANNED_WORKERS = {
-    "optimize": "Cost Optimization Engineer: finds, validates and plans savings (next phase).",
     "govern": "Governance: approved guardrails such as SCP proposals and policy enforcement (later phase).",
 }
 ACTIVE_WORKERS = {
     "visualization": "Cost exploration and change analysis",
+    "optimize": "Cost Optimization Engineer: validated savings estimates and reviewable plans (read-only, makes no changes)",
     "anomalies": "Deterministic daily anomaly detection",
     "budgets": "Budgets, run-rate forecasts and budget alerts (CostLens budgets, not AWS Budgets)",
 }
+_REALISED_RE = re.compile(r"\b(reali[sz]ed sav\w*|actual sav\w*|how much (have|did) (we|i) sav\w*)\b", re.I)
+_OPTIMIZE_RE = re.compile(r"\b(optimi[sz]\w*|rightsiz\w*|right-siz\w*|waste\w*|idle|save money|sav\w+ opportunit\w*|"
+                          r"how (much )?(can|could|do|should) (we|i|\S+) save|"
+                          r"(reduce|reducing|lower|cut|trim)\b[^.?!]*\b(costs?|spend\w*|bills?))\b", re.I)
 _ANOMALY_RE = re.compile(r"\b(anomal\w*|unusual|unexpected|abnormal|outliers?)\b", re.I)
 _FORECAST_RE = re.compile(r"\b(forecast\w*|predict\w*|projection|projected|end of (the )?(month|quarter|year)|"
                           r"run[- ]?rate|where will .* land)\b", re.I)
@@ -164,6 +168,12 @@ class Orchestrator:
             return {"kind": "budget_list", "worker": "budgets", "budgets": items,
                     "message": f"You have {len(items)} budget{'s' if len(items) != 1 else ''}." if items
                     else "No budgets yet. Describe one in plain English, for example: set up a monthly budget of $5,000 for prod-data."}
+        realised = bool(_REALISED_RE.search(text))
+        if realised or _OPTIMIZE_RE.search(text):
+            from . import optimize
+            understood: list[str] = []
+            filters = self.interpreter._filters(text.lower(), self.vocabulary(), understood)
+            return optimize.answer(self.conn, understood, filters, realised)
         if _ANOMALY_RE.search(text):
             summ = anomalies.summary(self.conn)
             self.audit.record("tool.call", {"worker": "anomalies", "tool": "detect", "status": "ok"})

@@ -1,11 +1,11 @@
-# CostLens (working name) — v0.2: Visualize, Anomalies, Budgets & forecasting
+# CostLens (working name) — v0.3: Visualize, Optimize, Anomalies, Budgets & forecasting
 
 An evidence-backed FinOps agent for AWS. The product has three pillars:
 
 | Pillar | Status in this release |
 |---|---|
 | **Visualize** — ask a cost question, get an adjustable Cost Explorer-style dashboard | **Implemented (local, synthetic data)** |
-| **Optimize** — Cost Optimization Engineer: find, validate and plan savings | Planned (next phase). The UI shows it as "Next" and does nothing. |
+| **Optimize** — Cost Optimization Engineer: find, validate and plan savings | **First slice implemented (local, synthetic data, read-only)**. Estimates only; realised savings are not measured. |
 | **Govern** — approved guardrails and enforcement (e.g. SCP proposals) | Planned (later phase). |
 | **Anomalies** — unusual cost increases, with drivers and likely owner | **Implemented (local, synthetic data)** |
 | **Budgets & forecasting** — plain-English budgets, run-rate forecasts, email alerts | **Implemented (local, synthetic data)**. Budgets live in CostLens, not in AWS Budgets. |
@@ -39,10 +39,31 @@ python -m costlens serve --db ./my.sqlite --port 8765
 - Top 5 teams by amortized cost this month
 - Untagged spend by account last month
 - Cost by service in July (shows the *missing data* state)
-- How can I optimize EC2? (explains that this is the next module)
+- How can I reduce EC2 cost?
+- How much can prod-data save?
+- How can I reduce S3 cost? (no recommendations, so no number)
+- How much have we saved so far? (realised savings: not measured)
 - Any cost anomalies in the last 90 days?
 - Forecast prod-data cost for this month
 - Set up a monthly budget of $5,000 for prod-data and alert ops@example.com at 80% and 100%, and when the forecast crosses 100%
+
+## Optimize
+
+Reads a synthetic Cost Optimization Hub and Compute Optimizer snapshot and checks every recommendation against
+CUR. Workers run in order: data quality → investigation → optimization → risk → action planning. Each finding
+shows owner, phase, status, monthly estimate, confidence, evidence, time range, a reproducible calculation, risks,
+limitations and, when the evidence allows, a reviewable plan.
+
+| Phase | Meaning | Counted in the total? |
+|---|---|---|
+| Plan ready | Evidence supports the estimate | Yes, once per resource |
+| Conditional | Instance is Savings Plan covered; the commitment is still paid | No, shown as "up to" |
+| Proposal only | Commitment purchase, scaled down by counted savings in its account | No, shown apart |
+| Alternative | Competes with another recommendation on the same resource | No |
+| Needs evidence | Evidence is missing or disagrees; no estimate is given | No |
+
+On the demo data the counted estimate is $3,272.06 a month, from sources that add up to $5,975.22. "Accept for
+planning" only records a decision. CostLens changes nothing in AWS.
 
 ## Anomalies
 
@@ -100,8 +121,11 @@ are flagged. On the demo data it finds exactly the two planted cases.
 
 - Any real AWS access (S3, Athena, Cost Explorer, Cost Optimization Hub, Compute Optimizer, etc.).
   `S3ExportSource` exists only as a documented interface and raises `NotImplementedError`.
+- Real Cost Optimization Hub and Compute Optimizer exports: the fixtures use a subset of their column names and
+  have not been tested against real files.
 - Any AI model. `COSTLENS_MODEL_PROVIDER` is read only to say that model mode is not implemented.
-- Optimization findings, action plans, approvals, governance enforcement (SCPs).
+- Savings verification (realised savings), Compute Optimizer evidence for anything except EC2 (so RDS findings stay
+  "needs evidence"), approvals, governance enforcement (SCPs).
 - Real AWS Budgets, scheduled alert checks, anomaly email subscriptions, seasonality-aware forecasts.
 - Multi-user login, tenant isolation beyond "one database file per tenant", encryption at rest.
 - Real AWS Data Exports manifest format: the fixture manifest is our own documented contract
@@ -110,7 +134,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 138 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 223 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

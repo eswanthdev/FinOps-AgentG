@@ -26,6 +26,9 @@ seasonality-aware forecast (weekday pattern, month-start charges), optional sync
 
 ## Stage 3 — Cost Optimization Engineer (MVP)
 
+First slice done on synthetic data (brought ahead of Stage 2, which still needs AWS approval). Everything below works
+locally. Remaining: test against real exports, Compute Optimizer evidence beyond EC2, re-measuring commitments.
+
 - Ingest Cost Optimization Hub and Compute Optimizer exports; join recommendations to CUR spend.
 - Workers: data quality → investigation → optimization → risk → action planning.
 - Findings with evidence, time range, confidence, owner (from tags/accounts), and a reproducible calculation.

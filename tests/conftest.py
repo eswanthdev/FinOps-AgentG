@@ -5,6 +5,7 @@ import pytest
 
 from costlens import fixtures, store
 from costlens.ingest.loader import ingest_source
+from costlens.ingest.optimization import ingest_optimization
 from costlens.ingest.sources import LocalDirectorySource
 
 
@@ -22,6 +23,7 @@ def fresh_conn(tmp_path):
 
 def load_demo(conn, root: Path):
     outcomes = ingest_source(conn, LocalDirectorySource(root))
+    ingest_optimization(conn, root / fixtures.OPT_FOLDER)
     store.set_meta(conn, "data_mode", "synthetic")
     store.set_meta(conn, "reference_date", fixtures.REFERENCE_DATE.isoformat())
     store.set_meta(conn, "expected_start_period", fixtures.EXPECTED_START_PERIOD)
