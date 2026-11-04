@@ -67,8 +67,8 @@ verified approvals (need SSO, Stage 6).
 
 ## Stage 6 — Production hardening and model-backed investigation
 
-The investigator is built and tested with a fake model, ahead of the rest of this stage by decision. Next, with approval:
-a first live run on Bedrock in Frankfurt, the 20-question evaluation, and a measured cost per question.
+The investigator runs live on Amazon Nova Lite in Frankfurt, ahead of the rest of this stage by decision. Next, with
+approval: the 20-question evaluation, a measured cost per question, and the agent platform plan.
 
 - SSO, roles, tenant isolation, encryption, retention settings, security review.
 - Configurable model provider for interpretation and narrative, constrained to typed tools and validated output.
