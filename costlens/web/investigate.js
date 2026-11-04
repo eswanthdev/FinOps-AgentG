@@ -7,7 +7,8 @@
   function render(body, resp) {
     body.appendChild(el("div", { class: "module-note", text: "Investigation · AI-assisted" }));
     body.appendChild(el("p", { class: "msg-text inv-answer", text: resp.message }));
-    body.appendChild(el("p", { class: "muted", text: "Written by a model. Every amount was checked against tool results. Nothing was changed." }));
+    body.appendChild(el("p", { class: "muted", text: "Written by a model. Every amount was checked against tool results. Nothing was changed." + (resp.memories_used ? ` Used ${resp.memories_used} of your memories.` : "") }));
+    if (resp.run_id) body.appendChild(window.CostLensAgent.runActions(resp));
     if (resp.evidence_queries.length) body.appendChild(el("div", { class: "followups" }, resp.evidence_queries.map(e =>
       el("button", { class: "followup", type: "button", text: "Open evidence: " + e.title, onclick: () => U().openQuery(e.query, "Evidence: " + e.title) }))));
     body.appendChild(el("details", { class: "calc panel inv-trace" },

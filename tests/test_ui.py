@@ -482,3 +482,79 @@ def test_failed_model_shows_a_notice_and_a_rules_answer(page, monkeypatch):
     send(page, "Show cost by service for last month")
     page.wait_for_selector(".card .chart-wrap svg")
     assert "fixed rules" in page.locator(".msg-body .notice").first.inner_text()
+
+class ScriptedModel:
+    model = "fake-model"
+
+    def __init__(self, *texts):
+        self.texts = list(texts)
+
+    def create(self, *_):
+        from costlens.agent.investigator import ModelTurn
+        return ModelTurn("end_turn", [{"type": "text", "text": self.texts.pop(0)}], 10, 5)
+
+
+def test_memory_page_add_and_forget(page):
+    page.click(".nav-item[data-view=memory]")
+    page.get_by_label("New memory").fill("I care about prod-data first")
+    page.get_by_role("button", name="Remember").click()
+    expect(page.locator("[data-memory]")).to_have_count(1)
+    page.get_by_label("New memory").fill("The bill is $5,000")
+    page.get_by_role("button", name="Remember").click()
+    expect(page.locator("#toast")).to_contain_text("amounts")
+    page.locator("[data-memory]").get_by_role("button", name="Forget").click()
+    expect(page.locator("#memoryPage")).to_contain_text("Nothing remembered yet")
+    assert all("status of 400" in e for e in page.errors)  # the refused amount above, and nothing else
+
+
+def test_remember_in_chat(page):
+    send(page, "Remember that sandbox belongs to research")
+    expect(page.locator(".msg-body").last).to_contain_text("Saved to your memory")
+    page.click(".nav-item[data-view=memory]")
+    expect(page.locator("[data-memory]")).to_contain_text("sandbox belongs to research")
+
+
+def test_conversation_is_saved_and_can_continue(page):
+    send(page, "Show cost by service for last month")
+    page.wait_for_selector(".card .chart-wrap svg")
+    page.click(".nav-item[data-view=conversations]")
+    page.wait_for_selector("[data-conversation]")
+    page.locator("[data-conversation]").get_by_role("button", name="Continue").click()
+    expect(page.locator(".msg-user .bubble").first).to_contain_text("Show cost by service")
+    send(page, "Now by account")
+    expect(page.locator(".msg-user .bubble")).to_have_count(2)
+    page.click(".nav-item[data-view=conversations]")
+    expect(page.locator("[data-conversation]")).to_have_count(1)
+    assert not page.errors
+
+
+def test_save_report_feedback_and_agent_runs(page, monkeypatch):
+    from costlens.agent import investigator
+    fake = ScriptedModel("Nothing unusual to report.")
+    monkeypatch.setattr(investigator, "make_client", lambda: fake)
+    send(page, "Anything to report?")
+    page.wait_for_selector(".inv-answer")
+    page.get_by_role("button", name="Good answer").click()
+    expect(page.locator("#toast")).to_contain_text("feedback")
+    page.get_by_role("button", name="Save as report").click()
+    expect(page.locator("#toast")).to_contain_text("Saved to Reports")
+    page.click(".nav-item[data-view=reports]")
+    page.wait_for_selector("[data-report]")
+    page.locator("[data-report]").get_by_role("button", name="Open").click()
+    expect(page.locator("[data-report-detail]")).to_contain_text("Nothing unusual to report.")
+    page.click(".nav-item[data-view=runs]")
+    page.wait_for_selector("[data-run]")
+    text = page.locator("#runsPage").inner_text()
+    assert "1 up / 0 down" in text and "no verified model price" in text
+    assert not page.errors
+
+
+def test_agent_pages_on_mobile(browser, app_url):
+    pg = browser.new_page(viewport={"width": 375, "height": 800})
+    pg.goto(app_url)
+    pg.wait_for_selector(".suggestion")
+    for view in ("conversations", "memory", "reports", "runs"):
+        pg.click("#menuBtn")
+        pg.click(f".nav-item[data-view={view}]")
+        pg.wait_for_selector(f"#{view}Page .page-head")
+        assert pg.evaluate("document.documentElement.scrollWidth") <= 375, view

@@ -296,6 +296,49 @@ Resources:
             CreateRule: { Interval: 24, IntervalUnit: HOURS, Times: ["20:00"] }
             RetainRule: { Count: 7 }
 
+  AlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      KmsMasterKeyId: alias/aws/sns
+      Subscription:
+        - { Protocol: email, Endpoint: !Ref BudgetEmail }
+  AgentFailureFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref LogGroup
+      FilterPattern: '"agent_run_failed"'
+      MetricTransformations:
+        - { MetricName: AgentRunFailures, MetricNamespace: CostLens, MetricValue: "1", DefaultValue: 0 }
+  AgentFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Three or more agent runs failed in an hour
+      Namespace: CostLens
+      MetricName: AgentRunFailures
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 3
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: [!Ref AlertTopic]
+  ServerUnhealthyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The load balancer has no healthy CostLens server
+      Namespace: AWS/ApplicationELB
+      MetricName: HealthyHostCount
+      Dimensions:
+        - { Name: LoadBalancer, Value: !GetAtt LoadBalancer.LoadBalancerFullName }
+        - { Name: TargetGroup, Value: !GetAtt TargetGroup.TargetGroupFullName }
+      Statistic: Minimum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref AlertTopic]
+
   MonthlyBudget:
     Type: AWS::Budgets::Budget
     Properties:

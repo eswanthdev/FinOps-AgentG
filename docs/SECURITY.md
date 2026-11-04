@@ -30,6 +30,9 @@
 | Answers are rejected if any amount or percentage is not in a tool result the model saw | `agent/investigator.py` |
 | Billing text reaches the model only inside tool results; it cannot widen the tool list. Traces are redacted | `agent/investigator.py` |
 | Model answers are inserted with `textContent`; runs and tool calls are audited; each run has hard limits | `web/investigate.js`, `agent/investigator.py` |
+| Conversations, memory, reports and run data are scoped by user; behind the proxy, no login means 401 | `agent/session.py`, `server.py` |
+| The model cannot write memory; memory refuses amounts and secrets and reaches the model as quoted data | `agent/session.py`, `agent/investigator.py` |
+| A monthly token limit stops model calls and falls back to fixed rules | `agent/session.py`, `agent/orchestrator.py` |
 | Audit retention purge on server start (`COSTLENS_AUDIT_RETENTION_DAYS`, default 90) | `store.purge_audit` |
 
 ## Designed, not implemented
@@ -38,8 +41,9 @@
   balancer, encrypted disk, IMDSv2 and a narrow server role. Text checks exist; none of it has been deployed. The app
   trusts the network to enforce that the proxy is the only way in, and does not verify login tokens itself.
 
-- **Verified approvals**: "Approved" in Govern records a decision only. With no login, anyone using the local app can
-  record it. Real sign-off needs SSO, roles and separation of duties.
+- **Verified identity**: the app trusts the load balancer identity header without checking its signature, so the network
+  rule that only the load balancer reaches the server is essential. "Approved" in Govern records a decision only, and anyone
+  signed in can record it. Real sign-off needs SSO, roles and separation of duties.
 
 - **Alert recipients**: today any valid address can be added. Production needs a verified-domain allow-list
   and recipient confirmation, so the tool cannot be used to email arbitrary people.

@@ -51,6 +51,16 @@ savings, follows the evidence, and writes the answer. Each answer shows what the
 Synthetic data only for now. The numbers are checked; the model's reasoning and conclusions are not, so a person should
 read them as a starting point. Follow-up questions see only the previous query, not the whole conversation.
 
+## Agent platform
+
+- **Conversations:** saved per user, resumable, with recent turns passed to the model. Replies stream their steps.
+- **Memory:** short personal notes, added only by you (Memory page, or "remember that ..." in chat). The model cannot write it, and amounts are refused.
+- **Reports:** save an answer. Opening it shows the saved answer beside figures recalculated now. Download as Markdown.
+- **Agent runs:** status, tools, turns, tokens, time and feedback for every run, with a monthly token limit and CloudWatch alarms.
+- **Evaluation:** 29 questions, including refusals and follow-ups, with a pass gate: `eval-agent --min-pass 90`. It calls a paid model.
+
+The model and region are settings, so moving from Nova Lite to a stronger model later needs no rebuild.
+
 ## Hosting on AWS
 
 **Deployed** in `eu-central-1` at https://costlens.cloudaip.com, with synthetic data only. See
@@ -203,7 +213,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 493 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 537 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

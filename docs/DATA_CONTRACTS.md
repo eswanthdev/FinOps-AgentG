@@ -246,3 +246,16 @@ Only Plan ready, Conditional and Alternative findings can be recorded. Realised 
 
 A separate database. It records 9 changes on the normal fixtures, then loads `<root>/after-changes/`: November final and
 December month-to-date, through 15 Dec 2026. Reference date 16 Dec 2026. Every outcome is planted.
+## 9. Agent state
+
+| Table | Holds | Scope | Kept |
+|---|---|---|---|
+| conversations, conversation_messages | Titles and plain-text turns, redacted | One user | 90 days after the last message |
+| memories | Short notes a person added | One user | Until deleted; at most 50, 300 characters each |
+| agent_runs | Status, tools, turns, tokens, time, question, answer, trace, feedback | One user; the summary is an operator view with no questions or answers | 90 days |
+| reports | Saved answer, trace and evidence queries | One user | Until deleted; at most 200 |
+
+- `COSTLENS_CHAT_RETENTION_DAYS` changes the 90 days. `COSTLENS_AGENT_MONTHLY_TOKENS` sets the model limit (default 20,000,000).
+- At most the last 16 messages or 12,000 characters of a conversation reach the model.
+- Memory refuses amounts and anything that looks like a secret.
+- User identity is `local`, or `x-amzn-oidc-identity` from the load balancer. The token signature is not verified.

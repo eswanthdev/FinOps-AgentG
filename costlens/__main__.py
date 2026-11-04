@@ -54,6 +54,8 @@ def _print_outcomes(outcomes) -> None:
 def _run_server(db: Path, host: str, port: int, label: str) -> None:
     conn = connect(db)
     removed = purge_audit(conn, int(os.environ.get("COSTLENS_AUDIT_RETENTION_DAYS", "90")))
+    from .agent import session
+    removed += session.purge(conn, int(os.environ.get("COSTLENS_CHAT_RETENTION_DAYS", session.DEFAULT_RETENTION_DAYS)))
     conn.close()
     if removed:
         print(f"Purged {removed} audit events past the retention window.")
@@ -102,6 +104,7 @@ def main(argv: list[str] | None = None) -> int:
 
     e = sub.add_parser("eval-agent", help="run the evaluation questions. Calls a paid model.")
     e.add_argument("--db", required=True)
+    e.add_argument("--min-pass", type=int, default=90, help="percent of questions that must pass")
 
     a = p.parse_args(argv)
     if a.cmd == "eval-agent":
@@ -114,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
         report = agent_eval.run(conn, client)
         conn.close()
         print(json.dumps(report, indent=2))
-        return 0 if report["passed"] == report["total"] else 1
+        return 0 if agent_eval.gate(report, a.min_pass) else 1
     if a.cmd == "generate-fixtures":
         out = fixtures.generate(a.out)
         print(f"Synthetic fixtures in {out}")

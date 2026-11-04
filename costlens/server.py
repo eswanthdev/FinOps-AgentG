@@ -19,7 +19,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import anomalies, budgets, hosting, notify
-from .agent import govern, optimize, verify
+from .agent import govern, optimize, session, verify
 from .agent.orchestrator import ACTIVE_WORKERS, Orchestrator, PLANNED_WORKERS, model_mode
 from .query import engine
 from .query.model import CostQuery, QueryError
@@ -29,7 +29,7 @@ from .store import connect, utc_now
 WEB_DIR = Path(__file__).parent / "web"
 STATIC = {"app.js": "text/javascript", "styles.css": "text/css", "charts.js": "text/javascript", "features.js": "text/javascript",
           "optimize.js": "text/javascript", "govern.js": "text/javascript",
-          "investigate.js": "text/javascript"}
+          "investigate.js": "text/javascript", "agent.js": "text/javascript"}
 MAX_BODY = 64 * 1024
 _HOST_RE = re.compile(r"^(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$")
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
@@ -55,10 +55,11 @@ def make_handler(db_path: str, source_label: str):
             log.info("%s %s", self.command, self.path.split("?")[0])
 
         # ---------------------------------------------------------- plumbing
-        def _headers(self, status: int, ctype: str, length: int, cache: bool = False):
+        def _headers(self, status: int, ctype: str, length: int | None, cache: bool = False):
             self.send_response(status)
             self.send_header("Content-Type", ctype)
-            self.send_header("Content-Length", str(length))
+            if length is not None:  # None streams until the connection closes
+                self.send_header("Content-Length", str(length))
             self.send_header("Content-Security-Policy", CSP)
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Referrer-Policy", "no-referrer")
@@ -97,6 +98,29 @@ def make_handler(db_path: str, source_label: str):
             if not isinstance(data, dict):
                 raise ApiError(400, "Body must be a JSON object.")
             return data
+
+        def _user(self) -> str:
+            user = hosting.current_user(self.headers)
+            if user is None:
+                raise ApiError(401, "Sign in first.")
+            return user
+
+        def _stream_ask(self, orch, user: str, data: dict) -> None:
+            """Send progress as one JSON object per line, then the full response."""
+            self._headers(200, "application/x-ndjson; charset=utf-8", None)
+
+            def send(event: dict) -> None:
+                self.wfile.write(json.dumps(event, default=str).encode() + b"\n")
+                self.wfile.flush()
+            try:
+                response = orch.ask(data["question"], data.get("previous") if isinstance(data.get("previous"), dict) else None,
+                                    user_id=user, conversation_id=str(data.get("conversation_id") or "") or None, on_event=send)
+                send({"type": "done", "response": response})
+            except (BrokenPipeError, ConnectionResetError):
+                log.info("client left during a stream")
+            except Exception:  # noqa: BLE001 - headers are sent, so report inside the stream
+                log.error("unhandled stream error: %s", traceback.format_exc(limit=3))
+                send({"type": "error", "error": "Internal error. Check the server log."})
 
         def _dispatch(self, fn):
             conn = None
@@ -157,6 +181,27 @@ def make_handler(db_path: str, source_label: str):
                     return self._json(200, optimize.summary(conn))
                 if path == "/api/govern":
                     return self._json(200, govern.summary(conn))
+                user = self._user()
+                if path == "/api/conversations":
+                    return self._json(200, {"conversations": session.list_conversations(conn, user)})
+                m = re.match(r"^/api/conversations/([0-9a-f]{16})$", path)
+                if m:
+                    found = session.get_conversation(conn, user, m.group(1))
+                    if not found:
+                        raise ApiError(404, "Conversation not found")
+                    return self._json(200, found)
+                if path == "/api/memories":
+                    return self._json(200, {"memories": session.list_memories(conn, user)})
+                if path == "/api/reports":
+                    return self._json(200, {"reports": session.list_reports(conn, user)})
+                m = re.match(r"^/api/reports/(\d+)$", path)
+                if m:
+                    found = session.get_report(conn, user, int(m.group(1)))
+                    if not found:
+                        raise ApiError(404, "Report not found")
+                    return self._json(200, found)
+                if path == "/api/agent/runs":
+                    return self._json(200, session.runs_summary(conn))
                 if path == "/api/budgets":
                     return self._json(200, {"budgets": budgets.list_status(conn), "outbox": budgets.outbox(conn),
                                             "email": notify.describe(), "forecast": budgets.org_forecast(conn)})
@@ -180,12 +225,34 @@ def make_handler(db_path: str, source_label: str):
             def route(conn):
                 data = self._body()
                 orch = Orchestrator(conn)
-                if path == "/api/ask":
+                user = self._user()
+                if path in ("/api/ask", "/api/ask/stream"):
                     q = data.get("question")
                     if not isinstance(q, str):
                         raise ApiError(400, "question must be a string")
+                    if path == "/api/ask/stream":
+                        return self._stream_ask(orch, user, data)
                     prev = data.get("previous")
-                    return self._json(200, orch.ask(q, prev if isinstance(prev, dict) else None))
+                    return self._json(200, orch.ask(q, prev if isinstance(prev, dict) else None, user_id=user,
+                                                    conversation_id=str(data.get("conversation_id") or "") or None))
+                if path == "/api/memories":
+                    try:
+                        return self._json(201, session.add_memory(conn, user, str(data.get("text", ""))))
+                    except session.SessionError as exc:
+                        raise ApiError(400, str(exc)) from exc
+                if path == "/api/reports":
+                    try:
+                        report = session.save_report(conn, user, int(data.get("run_id") or 0), str(data.get("title") or ""))
+                    except (session.SessionError, ValueError) as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    return self._json(201, {"id": report})
+                m = re.match(r"^/api/agent/runs/(\d+)/feedback$", path)
+                if m:
+                    try:
+                        session.set_feedback(conn, user, int(m.group(1)), int(data.get("rating") or 0), str(data.get("note") or ""))
+                    except (session.SessionError, ValueError) as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    return self._json(200, {"id": int(m.group(1))})
                 if path == "/api/query":
                     if not isinstance(data.get("query"), dict):
                         raise ApiError(400, "query must be an object")
@@ -273,6 +340,15 @@ def make_handler(db_path: str, source_label: str):
 
             def route(conn):
                 self._body()  # enforces JSON content type + same origin
+                user = self._user()
+                for pattern, remove, cast in ((r"^/api/memories/(\d+)$", session.delete_memory, int),
+                                              (r"^/api/reports/(\d+)$", session.delete_report, int),
+                                              (r"^/api/conversations/([0-9a-f]{16})$", session.delete_conversation, str)):
+                    ms = re.match(pattern, path)
+                    if ms:
+                        if not remove(conn, user, cast(ms.group(1))):
+                            raise ApiError(404, "Not found")
+                        return self._json(200, {"deleted": ms.group(1)})
                 mi = re.match(r"^/api/optimize/([0-9a-f]{16})/implemented$", path)
                 if mi:
                     if not verify.undo(conn, mi.group(1)):

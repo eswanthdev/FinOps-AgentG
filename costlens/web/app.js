@@ -105,14 +105,19 @@
   // ------------------------------------------------------------ views
   function showView(v) {
     state.view = v;
-    ["chat", "dashboards", "data", "optimize", "govern", "anomalies", "budgets"].forEach(x => { $("view-" + x).hidden = x !== v; });
+    ["chat", "dashboards", "data", "optimize", "govern", "anomalies", "budgets", "conversations", "reports", "memory", "runs"].forEach(x => { $("view-" + x).hidden = x !== v; });
     document.querySelectorAll(".nav-item[data-view]").forEach(b => b.classList.toggle("active", b.dataset.view === v));
     $("topbarTitle").textContent = { chat: "Visualize", dashboards: "Saved dashboards", data: "Data & coverage",
+                                     conversations: "Conversations", reports: "Reports", memory: "Memory", runs: "Agent runs",
                                      optimize: "Optimize", govern: "Govern", anomalies: "Anomalies", budgets: "Budgets & forecasting" }[v];
     $("app").classList.remove("nav-open");
     C.hideTip();
     if (v === "dashboards") renderDashboards();
     if (v === "data") renderDataPage();
+    if (v === "conversations") window.CostLensAgent.renderConversations();
+    if (v === "reports") window.CostLensAgent.renderReports();
+    if (v === "memory") window.CostLensAgent.renderMemory();
+    if (v === "runs") window.CostLensAgent.renderRuns();
     if (v === "optimize") window.CostLensOptimize.render();
     if (v === "govern") window.CostLensGovern.render();
     if (v === "anomalies") window.CostLensFeatures.renderAnomalies();
@@ -136,7 +141,7 @@
       h("small", { text: k }), q)));
   }
   function newConversation() {
-    state.previous = null; state.history = [];
+    state.previous = null; state.history = []; state.conversationId = null;
     const th = $("thread");
     [...th.children].forEach(c => { if (c.id !== "emptyState") c.remove(); });
     $("emptyState").hidden = false;
@@ -152,6 +157,39 @@
   }
   function scrollToBottom() { const th = $("thread"); th.scrollTop = th.scrollHeight; }
 
+  async function askStream(payload, onStep) {
+    const res = await fetch("/api/ask/stream", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (!res.ok || !res.body) { let d = null; try { d = await res.json(); } catch (e) { /* non-JSON */ } throw new Error((d && d.error) || `Request failed (${res.status})`); }
+    const reader = res.body.getReader(), decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error("The answer stopped before it finished. Try again.");
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const event = JSON.parse(line);
+        if (event.type === "step") onStep(event.text);
+        if (event.type === "error") throw new Error(event.error);
+        if (event.type === "done") return event.response;
+      }
+    }
+  }
+
+  async function openConversation(id) {
+    newConversation();
+    const c = await api("/api/conversations/" + id).catch(e => { toast(e.message); return null; });
+    if (!c) return;
+    state.conversationId = c.id;
+    $("emptyState").hidden = true;
+    c.messages.forEach(m => $("thread").append(m.role === "user"
+      ? h("div", { class: "msg msg-user" }, h("div", { class: "bubble", text: m.text }))
+      : h("div", { class: "msg msg-assistant" }, h("div", { class: "avatar" }, icon.logo()), h("div", { class: "msg-body" }, h("p", { class: "msg-text inv-answer", text: m.text })))));
+    scrollToBottom();
+  }
+
   async function ask(question) {
     question = (question || "").trim();
     if (!question) return;
@@ -166,7 +204,11 @@
     renderHistory();
     scrollToBottom();
     try {
-      const resp = await api("/api/ask", { method: "POST", body: { question, previous: state.previous } });
+      const payload = { question, previous: state.previous, conversation_id: state.conversationId };
+      const live = state.status && state.status.model.mode === "model";
+      const resp = live ? await askStream(payload, text => { const t = body.querySelector(".thinking"); if (t) t.lastChild.textContent = text; })
+        : await api("/api/ask", { method: "POST", body: payload });
+      if (resp.conversation_id) state.conversationId = resp.conversation_id;
       body.textContent = "";
       renderAssistant(body, resp);
     } catch (e) {
@@ -180,6 +222,7 @@
   function renderAssistant(body, resp) {
     if (resp.model_note) body.appendChild(h("div", { class: "notice", text: resp.model_note }));
     if (resp.kind === "investigation") { window.CostLensInvestigate.render(body, resp); return; }
+    if (resp.kind === "memory") { body.appendChild(h("p", { class: "msg-text", text: resp.message })); return; }
     if (resp.kind === "optimize") { window.CostLensOptimize.renderChat(body, resp); followups(body, resp.suggestions); return; }
     if (resp.kind === "govern") { window.CostLensGovern.renderChat(body, resp); followups(body, resp.suggestions); return; }
     if (resp.kind) { window.CostLensFeatures.renderChatSpecial(body, resp); followups(body, resp.suggestions); return; }
@@ -551,6 +594,6 @@
 
   document.addEventListener("DOMContentLoaded", boot);
   window.CostLens = { ask, showView };
-  window.CostLensUI = { h, api, toast, kpi, statusPill, fmtDate, fmtTs, addDays, mountCard, showView, ask, openQuery,
+  window.CostLensUI = { h, api, toast, kpi, statusPill, fmtDate, fmtTs, addDays, mountCard, showView, ask, openQuery, openConversation,
                         state, icon, loadStatus };
 })();

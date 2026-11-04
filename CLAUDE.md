@@ -11,7 +11,7 @@ Needs Python 3.11+. Standard library only at runtime.
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens demo --scenario savings --reset-db   # separate demo with billing after recorded changes
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 493 passed
+python -m pytest -q                              # expected: 537 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 
@@ -27,6 +27,7 @@ Do not edit tests just to make them pass.
 - `costlens/agent/` - `interpreter.py` (deterministic text -> CostQuery), `orchestrator.py` (routes to workers; per-worker tool allow-list; audit).
 - `costlens/agent/optimize.py` - Cost Optimization Engineer workers and savings rules. `costlens/ingest/optimization.py` - COH and Compute Optimizer snapshots.
 - `costlens/agent/investigator.py` - optional model tool loop with read-only tools and the number check. `agent_eval.py` - evaluation questions.
+- `costlens/agent/session.py` - conversations, memory, run traces, reports. All scoped by user; `web/agent.js` is their UI.
 - `costlens/agent/verify.py` - savings verification: change records, baseline, attribution, result states.
 - `costlens/agent/govern.py` - Governance workers, guardrail drafts, workflow, exceptions. `costlens/ingest/governance.py` - organization file and typed policies.
 - `costlens/anomalies.py`, `budgets.py`, `notify.py` (outbox by default, SMTP via env vars).
@@ -51,6 +52,8 @@ Sidebar order: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting.
 - If evidence is not enough, say so. Do not invent findings or numbers.
 - Realised savings are computed from CUR, never stored and never added to estimates. Usage drops are not credited to a rightsizing change.
 - The model never calculates money and never gets a tool that writes. Do not weaken `check_answer` or add write tools to the investigator.
+- Memory is written only by the user, never holds amounts, and reaches the model as quoted data. Earlier turns are not evidence.
+- Model plan: Nova Lite now; move to a stronger Claude model once real data arrives.
 - Calling Bedrock or running `eval-agent` costs money and needs approval each time.
 - Guardrails are drafts only. "Approved" records a decision; no code path may apply anything to AWS.
 - Match surrounding code style. Add tests with every change.

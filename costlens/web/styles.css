@@ -345,6 +345,14 @@ details.calc summary::-webkit-details-marker { display: none; }
   .opt-table tr:not([data-opportunity]):not([hidden]), .opt-table tr:not([data-opportunity]):not([hidden]) td { display: block; padding-left: 0; padding-right: 0; }
 }
 
+/* Agent pages */
+.agent-row { display: flex; gap: 12px; justify-content: space-between; align-items: center; flex-wrap: wrap; overflow-wrap: anywhere; }
+.agent-actions { display: flex; gap: 8px; }
+.agent-add { display: flex; gap: 8px; margin-bottom: 14px; }
+.agent-add input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--bg); color: var(--ink); }
+.agent-table { margin-top: 14px; }
+.agent-feedback { margin-top: 8px; }
+
 /* Investigator */
 .inv-answer { white-space: pre-wrap; }
 .inv-trace { margin-top: 10px; }

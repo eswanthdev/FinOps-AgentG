@@ -15,6 +15,7 @@ import re
 
 LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1")
 _HOSTNAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+_IDENTITY_RE = re.compile(r"^[A-Za-z0-9_.@+-]{1,128}$")
 _LEVELS = {"DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR}
 
 
@@ -30,6 +31,18 @@ def behind_auth_proxy() -> bool:
 
 def bind_allowed(host: str) -> bool:
     return host in LOCAL_HOSTS or (behind_auth_proxy() and bool(allowed_hosts()))
+
+
+def current_user(headers) -> str | None:
+    """Who is asking. Local mode has one user. Behind the proxy it is the load balancer's login identity.
+
+    The load balancer sets this header on every request and replaces any value a client sends, and the
+    network only admits the load balancer. The token signature is not verified here. None means no login.
+    """
+    if not behind_auth_proxy():
+        return "local"
+    identity = (headers.get("x-amzn-oidc-identity") or "").strip()
+    return identity if _IDENTITY_RE.match(identity) else None
 
 
 def log_level() -> int:

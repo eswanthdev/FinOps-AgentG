@@ -12,6 +12,7 @@
 <script src="/static/optimize.js" defer></script>
 <script src="/static/govern.js" defer></script>
 <script src="/static/investigate.js" defer></script>
+<script src="/static/agent.js" defer></script>
 </head>
 <body>
 <div class="app" id="app">
@@ -33,6 +34,10 @@
       <button class="nav-item" data-view="anomalies" type="button"><span class="dot dot-live"></span>Anomalies<span class="count alert-count" id="anomalyCount"></span></button>
       <button class="nav-item" data-view="budgets" type="button"><span class="dot dot-live"></span>Budgets &amp; forecasting<span class="count" id="budgetCount"></span></button>
       <div class="nav-label">Workspace</div>
+      <button class="nav-item" data-view="conversations" type="button">Conversations</button>
+      <button class="nav-item" data-view="reports" type="button">Reports</button>
+      <button class="nav-item" data-view="memory" type="button">Memory</button>
+      <button class="nav-item" data-view="runs" type="button">Agent runs</button>
       <button class="nav-item" data-view="dashboards" type="button">Saved dashboards<span class="count" id="pinCount"></span></button>
       <button class="nav-item" data-view="data" type="button">Data &amp; coverage</button>
     </nav>
@@ -103,6 +108,11 @@
     <section class="view view-budgets" id="view-budgets" hidden>
       <div class="page" id="budgetPage"></div>
     </section>
+
+    <section class="view" id="view-conversations" hidden><div class="page" id="conversationsPage"></div></section>
+    <section class="view" id="view-reports" hidden><div class="page" id="reportsPage"></div></section>
+    <section class="view" id="view-memory" hidden><div class="page" id="memoryPage"></div></section>
+    <section class="view" id="view-runs" hidden><div class="page" id="runsPage"></div></section>
 
     <section class="view view-data" id="view-data" hidden>
       <div class="page" id="dataPage"></div>

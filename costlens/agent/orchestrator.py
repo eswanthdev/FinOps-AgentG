@@ -14,6 +14,7 @@ import importlib.util
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Callable
@@ -234,17 +235,48 @@ class Orchestrator:
         scope = f" for {' and '.join(parts)}" if parts else ""
         return f"Set up a {period} budget of ${dollars:,}{scope} and alert me at 80% and 100%"
 
-    def ask(self, question: str, previous: dict | None = None) -> dict:
+    def ask(self, question: str, previous: dict | None = None, *, user_id: str = "local", conversation_id: str | None = None,
+            on_event=None) -> dict:
+        """Answer inside a saved conversation. An empty question is answered but not saved."""
+        from . import session
+        question = (question or "")[:2000]
+        if not question.strip():
+            return self._ask_deterministic(question, previous)
+        conversation = session.ensure_conversation(self.conn, user_id, conversation_id, question)
+        past = session.history(self.conn, user_id, conversation)
+        session.add_message(self.conn, conversation, "user", question)
+        response = self._answer(question, previous, user_id, conversation, past, on_event)
+        session.add_message(self.conn, conversation, "assistant", str(response.get("message") or ""), response.get("run_id"))
+        response["conversation_id"] = conversation
+        return response
+
+    def _answer(self, question: str, previous: dict | None, user_id: str, conversation: str, past: list[dict], on_event) -> dict:
         """Use the investigator when a model is configured. Budget creation stays on its reviewed preview flow."""
         from .. import budgets
-        from . import investigator
-        question = (question or "")[:2000]
-        if not question.strip() or budgets.is_budget_request(question):
+        from . import investigator, session
+        wanted = session.remember_request(question)
+        if wanted:
+            try:
+                session.add_memory(self.conn, user_id, wanted)
+                message = "Saved to your memory. You can see or delete it on the Memory page."
+            except session.SessionError as exc:
+                message = f"I did not save that: {exc}"
+            return {"kind": "memory", "worker": "memory", "message": message, "suggestions": [], "mode": model_mode(), "result": None,
+                    "interpretation": {"status": "ok", "module": "memory", "understood": [], "assumptions": [], "query": None}}
+        if budgets.is_budget_request(question):
             return self._ask_deterministic(question, previous)
         client = investigator.make_client()
         if client is None:
             return self._ask_deterministic(question, previous)
-        result = investigator.investigate(self.conn, client, question, previous)
+        if session.tokens_this_month(self.conn) >= session.monthly_token_cap():
+            response = self._ask_deterministic(question, previous)
+            response["model_note"] = "The monthly model limit has been reached. This answer comes from fixed rules."
+            return response
+        notes = [m["text"] for m in session.list_memories(self.conn, user_id)]
+        started = time.monotonic()
+        result = investigator.investigate(self.conn, client, question, previous, history=past, notes=notes, on_event=on_event)
+        run_id = session.record_run(self.conn, user_id, conversation, investigator.model_name(client), question, result,
+                                    int((time.monotonic() - started) * 1000))
         if result["status"] == "ok":
             self.audit.record("question.received", {"question": redact(question[:500]), "interpretation": "investigation",
                                                     "module": "investigator"})
@@ -252,6 +284,8 @@ class Orchestrator:
             response["mode"] = model_mode()
             response["interpretation"] = {"status": "ok", "module": "investigator", "understood": [], "assumptions": [], "query": None}
             response["result"] = None
+            response["run_id"] = run_id
+            response["memories_used"] = len(notes)
             return response
         response = self._ask_deterministic(question, previous)
         response["model_note"] = f"{result['note']} This answer comes from fixed rules."
