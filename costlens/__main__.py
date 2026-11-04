@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 
 from . import fixtures
+from .agent.verify import load_savings_scenario
 from .ingest.governance import load_governance
 from .ingest.loader import ingest_source
 from .ingest.optimization import ingest_optimization
@@ -79,6 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("--port", type=int, default=8765)
     d.add_argument("--no-serve", action="store_true")
     d.add_argument("--reset-db", action="store_true", help="delete the demo database file first")
+    d.add_argument("--scenario", choices=["savings"], help="savings: a separate demo with billing after recorded changes")
 
     g = sub.add_parser("generate-fixtures")
     g.add_argument("--out", required=True)
@@ -104,13 +106,19 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "demo":
         data_dir = Path(a.data_dir)
         data_dir.mkdir(parents=True, exist_ok=True)
-        db = data_dir / "costlens-demo.sqlite"
+        db = data_dir / ("costlens-savings.sqlite" if a.scenario else "costlens-demo.sqlite")
         if a.reset_db:
             for suffix in ("", "-wal", "-shm"):
                 Path(str(db) + suffix).unlink(missing_ok=True)
         fx = fixtures.generate(data_dir / "fixtures")
         print(f"Ingesting synthetic deliveries from {fx}")
         _print_outcomes(_ingest(db, fx, synthetic=True))
+        if a.scenario:
+            conn = connect(db)
+            try:
+                _print_outcomes(load_savings_scenario(conn, fx))
+            finally:
+                conn.close()
         if a.no_serve:
             return 0
         _run_server(db, "127.0.0.1", a.port, "Synthetic fixtures (local folder)")

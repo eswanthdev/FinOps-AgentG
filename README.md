@@ -5,7 +5,7 @@ An evidence-backed FinOps agent for AWS. The product has three pillars:
 | Pillar | Status in this release |
 |---|---|
 | **Visualize** — ask a cost question, get an adjustable Cost Explorer-style dashboard | **Implemented (local, synthetic data)** |
-| **Optimize** — Cost Optimization Engineer: find, validate and plan savings | **First slice implemented (local, synthetic data, read-only)**. Estimates only; realised savings are not measured. |
+| **Optimize** — Cost Optimization Engineer: find, validate and plan savings | **First slice implemented (local, synthetic data, read-only)**. Estimates, plus realised savings measured for recorded changes. |
 | **Govern** — policy checks and guardrail drafts (SCPs and tag policies) | **First slice implemented (local, synthetic data)**. Drafts only; nothing is applied to AWS. |
 | **Anomalies** — unusual cost increases, with drivers and likely owner | **Implemented (local, synthetic data)** |
 | **Budgets & forecasting** — plain-English budgets, run-rate forecasts, email alerts | **Implemented (local, synthetic data)**. Budgets live in CostLens, not in AWS Budgets. |
@@ -42,7 +42,7 @@ python -m costlens serve --db ./my.sqlite --port 8765
 - How can I reduce EC2 cost?
 - How much can prod-data save?
 - How can I reduce S3 cost? (no recommendations, so no number)
-- How much have we saved so far? (realised savings: not measured)
+- How much have we saved so far? (not measured until a change is recorded)
 - Which spend has no owner?
 - Draft a guardrail for GPUs in sandbox
 - Show policy violations
@@ -67,6 +67,26 @@ limitations and, when the evidence allows, a reviewable plan.
 
 On the demo data the counted estimate is $3,272.06 a month, from sources that add up to $5,975.22. "Accept for
 planning" only records a decision. CostLens changes nothing in AWS.
+
+## Savings verification
+
+After a person makes a change, they record it on the finding with its date. CostLens then measures what CUR shows and
+puts the result next to the estimate, on the **Realised** tab of Optimize. The two are never added together.
+
+```bash
+python -m costlens demo --scenario savings --reset-db   # separate demo, with billing after 9 recorded changes
+```
+
+- **Baseline**: up to 14 days before the change. **Measured period**: at least 7 days after it, on final billing if possible.
+- **Credit**: rightsize and upgrade get the rate effect only, so a usage drop is not a saving. Stop and delete get the full drop.
+- **Savings Plan**: growth in unused commitment after a change to a covered instance is taken off, once.
+- **Overlaps**: two changes on one resource never share days. The second is measured from the rate the first left behind.
+- **Results**: Waiting, Provisional, Verified, Partly realised, Not realised, Cannot verify. Waiting and Cannot verify give no number.
+- Results are recalculated from CUR and never stored, so a billing revision updates them.
+
+In the savings scenario, $735.85 is measured on final billing and $15.62 is provisional. **Every outcome there is a
+planted synthetic story: it shows the method works, not that any real money was saved.** "Implemented" is self-reported,
+and other causes, such as a price change, cannot all be ruled out. Commitment purchases are not measured yet.
 
 ## Govern
 
@@ -144,8 +164,8 @@ are flagged. On the demo data it finds exactly the two planted cases.
 - Real Cost Optimization Hub and Compute Optimizer exports: the fixtures use a subset of their column names and
   have not been tested against real files.
 - Any AI model. `COSTLENS_MODEL_PROVIDER` is read only to say that model mode is not implemented.
-- Savings verification (realised savings), Compute Optimizer evidence for anything except EC2 (so RDS findings stay
-  "needs evidence").
+- Compute Optimizer evidence for anything except EC2 (so RDS findings stay "needs evidence"). Verification of commitment
+  purchases.
 - Any enforcement: CostLens never applies an SCP or tag policy. Real approvals with identity need SSO. AWS Budgets
   actions are not drafted, because budgets live in CostLens and not in AWS Budgets.
 - Real AWS Budgets, scheduled alert checks, anomaly email subscriptions, seasonality-aware forecasts.
@@ -156,7 +176,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 316 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 382 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

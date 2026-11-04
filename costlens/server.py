@@ -18,7 +18,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from . import anomalies, budgets, notify
-from .agent import govern, optimize
+from .agent import govern, optimize, verify
 from .agent.orchestrator import ACTIVE_WORKERS, Orchestrator, PLANNED_WORKERS, model_mode
 from .query import engine
 from .query.model import CostQuery, QueryError
@@ -182,6 +182,14 @@ def make_handler(db_path: str, source_label: str):
                         raise ApiError(400, str(exc)) from exc
                     orch.audit.record("anomaly.status", {"id": m.group(1), "status": data.get("status")})
                     return self._json(200, {"id": m.group(1), "status": data.get("status")})
+                m = re.match(r"^/api/optimize/([0-9a-f]{16})/implemented$", path)
+                if m:
+                    try:
+                        result = verify.mark_implemented(conn, m.group(1), str(data.get("implemented_on", "")), str(data.get("note", "")))
+                    except ValueError as exc:
+                        raise ApiError(400, str(exc)) from exc
+                    orch.audit.record("optimize.implemented", result)
+                    return self._json(201, result)
                 m = re.match(r"^/api/optimize/([0-9a-f]{16})$", path)
                 if m:
                     try:
@@ -249,6 +257,12 @@ def make_handler(db_path: str, source_label: str):
 
             def route(conn):
                 self._body()  # enforces JSON content type + same origin
+                mi = re.match(r"^/api/optimize/([0-9a-f]{16})/implemented$", path)
+                if mi:
+                    if not verify.undo(conn, mi.group(1)):
+                        raise ApiError(404, "No recorded change for this finding")
+                    Orchestrator(conn).audit.record("optimize.implemented_undone", {"id": mi.group(1)})
+                    return self._json(200, {"undone": mi.group(1)})
                 mb = re.match(r"^/api/budgets/(\d+)$", path)
                 if mb:
                     if not budgets.delete(conn, int(mb.group(1))):

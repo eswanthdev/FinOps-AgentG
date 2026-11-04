@@ -29,7 +29,7 @@ import hashlib
 import io
 import json
 import shutil
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_EVEN
 from pathlib import Path
@@ -218,11 +218,12 @@ def _row(period_start: date, account: str, line_type: str, d: date, service: str
     }
 
 
-def rows_for_period(period: str, through: date, *, revision: bool = False) -> list[dict]:
+def rows_for_period(period: str, through: date, *, revision: bool = False,
+                    resources: list[Resource] | None = None) -> list[dict]:
     y, m = map(int, period.split("-"))
     p_start = date(y, m, 1)
     out: list[dict] = []
-    resources = build_resources()
+    resources = build_resources() if resources is None else resources
     d = p_start
     while d.month == m and d <= through:
         sp_used = Decimal(0)
@@ -445,6 +446,93 @@ def generate_optimization(root: str | Path) -> Path:
 
 
 GOV_FOLDER = "governance"
+AFTER_FOLDER = "after-changes"
+SAVINGS_REFERENCE_DATE = date(2026, 12, 16)
+SAVINGS_DATA_END = date(2026, 12, 15)
+
+
+def _until(res: Resource, last: date) -> Resource:
+    """The same resource, ending on a given day."""
+    old = res.daily
+
+    def f(d: date):
+        return None if d > last else old(d)
+    return replace(res, daily=f)
+
+
+def _from(res: Resource, first: date, usage_type: str, rate: str, *, hours: str = "24", sp_rate: str | None = None,
+          resource_id: str | None = None) -> Resource:
+    """What a resource became on a given day."""
+    def f(d: date):
+        return None if d < first else (_d(hours), _d(rate) * _d(hours))
+    return replace(res, usage_type=usage_type, daily=f, resource_id=resource_id or res.resource_id,
+                   sp_rate=_d(sp_rate) if sp_rate else res.sp_rate)
+
+
+def savings_resources() -> list[Resource]:
+    """SYNTHETIC after-change story. Every outcome below is planted to exercise a rule in agent/verify.py."""
+    nov10, nov20 = date(2026, 11, 10), date(2026, 11, 20)
+    out: list[Resource] = []
+    for r in build_resources():
+        day_before = {"i-0f0a0001g5": date(2026, 11, 4), "i-0d0e0000c6i": date(2026, 11, 9), "i-0d0e0002c6i": date(2026, 11, 9),
+                      "i-0d0e0003c6i": date(2026, 11, 9), "i-0c0a0000m6i": date(2026, 11, 9), "i-0d0a0000r6i": date(2026, 11, 19),
+                      "vol-stg-pool": date(2026, 12, 4), "i-0c0a0004m6i": date(2026, 12, 11)}.get(r.resource_id)
+        if day_before is None:
+            out.append(r)
+            continue
+        out.append(_until(r, day_before))
+        if r.resource_id == "i-0d0e0000c6i":      # rightsized as planned, then moved to Graviton
+            first = _from(r, nov10, "BoxUsage:c6i.2xlarge", "0.340")
+            out.append(_until(first, date(2026, 11, 19)))
+            out.append(_from(r, nov20, "BoxUsage:c7g.2xlarge", "0.290"))
+        elif r.resource_id == "i-0d0e0002c6i":    # never resized: it only runs half the hours, so no rate saving
+            out.append(_from(r, nov10, r.usage_type, "0.680", hours="12"))
+        elif r.resource_id == "i-0d0e0003c6i":    # replaced by a new instance id, so the change cannot be followed
+            out.append(_from(r, nov10, "BoxUsage:c6i.2xlarge", "0.340", resource_id="i-0d0e0103c6i"))
+        elif r.resource_id == "i-0c0a0000m6i":    # Savings Plan covered: the freed commitment goes unused
+            out.append(_from(r, nov10, "BoxUsage:m6i.large", "0.096", sp_rate="0.0672"))
+        elif r.resource_id == "i-0d0a0000r6i":    # moved to a cheaper family, not the recommended size
+            out.append(_from(r, nov20, "BoxUsage:r6a.2xlarge", "0.4536"))
+        elif r.resource_id == "vol-stg-pool":     # changed in December, which is not final yet
+            gp3_first = date(2026, 12, 5)
+
+            def gp3(d: date, first=gp3_first):
+                if d < first:
+                    return None
+                gb = _d(2000) * _noise("ebsst", d, spread=0.002)
+                return gb / _days_in_month(d), gb * _d("0.088") / _days_in_month(d)
+            out.append(replace(r, usage_type="EU-EBS:VolumeUsage.gp3", operation="CreateVolume-Gp3", daily=gp3))
+        elif r.resource_id == "i-0c0a0004m6i":    # changed 4 days before the data ends
+            out.append(_from(r, date(2026, 12, 12), "BoxUsage:m6i.large", "0.096"))
+    return out
+
+
+def savings_changes() -> list[dict]:
+    """The changes a person records in the savings scenario."""
+    return [
+        {"recommendation_id": "coh-g5-stop", "implemented_on": "2026-11-05", "note": "Stopped after owner review"},
+        {"recommendation_id": "coh-etl-0", "implemented_on": "2026-11-10", "note": "Resized"},
+        {"recommendation_id": "coh-etl-grav-0", "implemented_on": "2026-11-20", "note": "Moved to Graviton after resizing"},
+        {"recommendation_id": "coh-etl-2", "implemented_on": "2026-11-10", "note": "Reported as resized"},
+        {"recommendation_id": "coh-etl-3", "implemented_on": "2026-11-10", "note": "Replaced during the change"},
+        {"recommendation_id": "coh-m6i-0", "implemented_on": "2026-11-10", "note": "Resized"},
+        {"recommendation_id": "coh-r6i-0", "implemented_on": "2026-11-20", "note": "Resized"},
+        {"recommendation_id": "coh-ebs-gp3", "implemented_on": "2026-12-05", "note": "Moved to gp3"},
+        {"recommendation_id": "coh-m6i-4", "implemented_on": "2026-12-12", "note": "Resized"},
+    ]
+
+
+def generate_savings_after(root: str | Path) -> Path:
+    """Write the deliveries that arrive after the changes: November final and December month-to-date."""
+    target = Path(root) / AFTER_FOLDER
+    if target.exists():
+        return target
+    res = savings_resources()
+    _write_delivery(target, "101-2026-11-final", "2026-11", "exec-2026-11-final", "2026-12-03T04:00:00Z",
+                    rows_for_period("2026-11", date(2026, 11, 30), resources=res), complete=True)
+    _write_delivery(target, "102-2026-12-mtd", "2026-12", "exec-2026-12-a", "2026-12-16T05:00:00Z",
+                    rows_for_period("2026-12", SAVINGS_DATA_END, resources=res), complete=False)
+    return target
 
 
 def organization() -> dict:

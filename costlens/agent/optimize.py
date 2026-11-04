@@ -1,7 +1,7 @@
 """Cost Optimization Engineer: data quality -> investigation -> optimization -> risk -> action planning.
 
 Deterministic, read-only, local. Nothing here calls AWS or changes anything. Every
-finding is an ESTIMATE; realised savings are not measured in this release.
+finding is an ESTIMATE; realised savings are measured apart, in agent/verify.py.
 
 Rules (documented so results are reproducible):
   * Evidence window: the last 30 days of ingested CUR. Monthly run-rate =
@@ -50,7 +50,7 @@ ACTION_LABELS = {"Rightsize": "Rightsize", "Stop": "Stop", "Delete": "Delete", "
                  "MigrateToGraviton": "Migrate to Graviton", "ScaleIn": "Scale in",
                  "PurchaseSavingsPlans": "Buy Savings Plan", "PurchaseReservedInstances": "Buy Reserved Instances"}
 REALISED = {"state": "not_measured", "display": "Not measured",
-            "detail": "No change has been made and savings verification is not built yet, so realised savings are unknown."}
+            "detail": "No change has been recorded, so there is nothing to measure yet."}
 
 
 def monthly_run_rate(total_nanos: int, days: int) -> int:
@@ -532,6 +532,8 @@ class OptimizationPipeline:
                     "totals": _totals([]), "realised": REALISED, "workers": self.trace}
         names = account_names(self.conn)
         states = {r["finding_id"]: dict(r) for r in self.conn.execute("SELECT * FROM opt_states")}
+        for r in self.conn.execute("SELECT finding_id FROM opt_changes"):
+            states[r["finding_id"]] = {**states.get(r["finding_id"], {}), "status": "implemented"}
         commitment = self.investigation.call("commitment_usage", window=window)
         candidates, truncated = self.optimization.call("candidates")
         if truncated:
@@ -600,7 +602,7 @@ def _quality_report(findings: list[dict], snapshot: dict, window: dict) -> list[
 
 
 def _totals(findings: list[dict]) -> dict:
-    live = [f for f in findings if f["status"] != "dismissed"]
+    live = [f for f in findings if f["status"] not in ("dismissed", "implemented")]  # still-open estimates only
     counted = [f for f in live if f["counted"]]
     ids = [(f["account_id"], f["resource_id"]) for f in counted]
     assert len(ids) == len(set(ids)), "a resource must never be counted twice"
@@ -616,6 +618,8 @@ def _totals(findings: list[dict]) -> dict:
     out.update({k + "_display": _fmt_usd(v) for k, v in amounts.items()})
     out["counted_count"] = len(counted)
     out["needs_evidence_count"] = sum(1 for f in live if f["phase"] == "needs_evidence")
+    out["realised_display"] = REALISED["display"]
+    out["realised_sub"] = "no change recorded yet"
     return out
 
 
@@ -639,7 +643,8 @@ def summary(conn, filters: dict[str, list[str]] | None = None) -> dict:
     if filters:
         result["opportunities"] = [f for f in result["opportunities"] if _matches(f, filters)]
         result["totals"] = _totals(result["opportunities"])
-    return result
+    from . import verify
+    return verify.attach(conn, result)
 
 
 def set_status(conn, finding_id: str, status: str, note: str = "") -> None:
@@ -661,7 +666,13 @@ def answer(conn, understood: list[str], filters: dict[str, list[str]], realised_
         return reply
     t = s["totals"]
     scope = f" for {', '.join(understood)}" if understood else ""
-    if realised_question:
+    if realised_question and s["realised"]["state"] == "measured":
+        v = s["verification"]["totals"]
+        reply["verification"] = v
+        reply["message"] = (f"Realised so far: {s['realised']['detail']} {v['counts']['waiting']} waiting for more billing and "
+                            f"{v['counts']['cannot_verify']} cannot be verified. This covers all accounts. "
+                            f"Separately, estimates still open{scope}: {t['counted_display']} a month.")
+    elif realised_question:
         reply["message"] = (f"Realised savings: not measured. {REALISED['detail']} Estimated savings still open{scope}: "
                             f"{t['counted_display']} a month.")
     elif not s["opportunities"]:

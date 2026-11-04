@@ -52,7 +52,9 @@
   the deterministic one, so a model can never run free-form SQL or exceed limits.
 - **Mode labelling**: every response carries `mode: deterministic` and the UI shows "Deterministic mode".
 
-Planned workers for the next phases (interfaces to be added when built): savings verification.
+- **Verification pipeline** (`agent/verify.py`): four workers with fixed tool allow-lists. Change record lists what a
+  person recorded; baseline measures windows through a `CostQuery`; attribution splits rate, usage and commitment
+  effects; verification sets the result state. Results are recalculated on every run and never stored.
 
 ## Why these choices
 

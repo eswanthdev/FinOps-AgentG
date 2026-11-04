@@ -24,6 +24,7 @@
 | Govern is draft-only: guardrails are text, no AWS client exists, and a test checks the code imports none | `agent/govern.py`, `test_govern.py` |
 | Policies are typed with a fixed set of kinds; unknown fields are rejected and bad files change nothing | `ingest/governance.py` |
 | Guardrail status changes, exceptions and policy on/off are audited; an approved draft that changes loses its approval | `agent/govern.py`, `server.py` |
+| Verification is read-only: recording or undoing a change is audited and touches no AWS resource | `agent/verify.py`, `server.py` |
 | Audit retention purge on server start (`COSTLENS_AUDIT_RETENTION_DAYS`, default 90) | `store.purge_audit` |
 
 ## Designed, not implemented

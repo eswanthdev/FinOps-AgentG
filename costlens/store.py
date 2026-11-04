@@ -163,6 +163,21 @@ CREATE TABLE IF NOT EXISTS opt_states (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS opt_changes (
+    finding_id TEXT PRIMARY KEY,
+    recommendation_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    account TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    recommended TEXT NOT NULL,
+    estimate_nanos INTEGER NOT NULL,
+    implemented_on TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS gov_policies (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

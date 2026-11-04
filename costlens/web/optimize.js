@@ -4,7 +4,8 @@
   const U = () => window.CostLensUI;
   const local = { tab: "all", open: new Set() };
   const TABS = [["all", "All"], ["plan_ready", "Plan ready"], ["conditional", "Conditional"], ["proposal", "Proposal only"],
-                ["alternative", "Alternative"], ["needs_evidence", "Needs evidence"], ["dismissed", "Dismissed"]];
+                ["alternative", "Alternative"], ["needs_evidence", "Needs evidence"], ["dismissed", "Dismissed"], ["realised", "Realised"]];
+  const MARKABLE = ["plan_ready", "conditional", "alternative"];
   const STARTERS = ["How can I reduce EC2 cost?", "How much can prod-data save?", "How much have we saved so far?"];
 
   function el(...a) { return U().h(...a); }
@@ -25,7 +26,52 @@
       U().kpi("Estimated, counted", t.counted_display, `${t.counted_count} findings a month, no overlaps`, "down"),
       U().kpi("Conditional, not counted", t.conditional_display, "Savings Plan covered"),
       U().kpi("Commitment proposal", t.proposal_display, "shown apart, never added"),
-      U().kpi("Realised", "Not measured", "nothing has been changed"));
+      U().kpi("Realised", t.realised_display, t.realised_sub));
+  }
+
+  function markForm(f) {
+    const day = el("input", { type: "date", "aria-label": "Date implemented" });
+    const note = el("input", { type: "text", maxlength: "500", placeholder: "Note (optional)", "aria-label": "Implementation note" });
+    const err = el("div", { class: "notice error", hidden: true });
+    const save = el("button", { class: "btn", type: "button", text: "Record as implemented" });
+    save.addEventListener("click", async () => {
+      err.hidden = true;
+      try {
+        await U().api(`/api/optimize/${f.id}/implemented`, { method: "POST", body: { implemented_on: day.value, note: note.value } });
+        U().toast("Recorded. CostLens changed nothing in AWS.");
+        local.tab = "realised"; render(); refreshCount();
+      } catch (e) { err.textContent = e.message; err.hidden = false; }
+    });
+    return el("details", { class: "gov-exception opt-mark" }, el("summary", { text: "Record that this was done" }),
+      el("p", { class: "muted", text: "Use this after a person has made the change. CostLens then measures what billing shows." }),
+      el("div", { class: "gov-form opt-mark-form" }, day, note, save), err);
+  }
+
+  function realisedCard(r) {
+    const undo = el("button", { class: "btn", type: "button", text: "Undo record", onclick: async () => {
+      try { await U().api(`/api/optimize/${r.finding_id}/implemented`, { method: "DELETE", body: {} }); U().toast("Record removed"); render(); refreshCount(); }
+      catch (e) { U().toast(e.message); }
+    } });
+    return el("div", { class: "card", "data-change": r.finding_id },
+      el("div", { class: "card-head" }, el("div", {},
+        el("div", { class: "card-title", text: r.title }),
+        el("div", { class: "card-range", text: `${r.account} · implemented ${U().fmtDate(r.implemented_on)}${r.note ? " · " + r.note : ""}` }),
+        el("div", { class: "pills" }, pill(r.state, r.state_label)))),
+      el("div", { class: "kpis" },
+        U().kpi("Estimated", r.estimate_display, "a month, before the change"),
+        U().kpi("Realised, monthly rate", r.monthly_display, r.share_of_estimate ? `${r.share_of_estimate}% of the estimate` : "not measured"),
+        U().kpi("Realised so far", r.realised_display, r.after_window ? `${r.after_window.days} days measured` : "not measured")),
+      el("p", { class: "explain", text: r.reason }),
+      r.split.length ? el("div", { class: "tbl-wrap" }, el("table", { class: "tbl" },
+        el("thead", {}, el("tr", {}, ["Part of the change", "Amount", "Counted?"].map((x, i) => el("th", { class: i === 1 ? "num" : "", text: x })))),
+        el("tbody", {}, r.split.map(x => el("tr", {}, el("td", { text: x.label }), el("td", { class: "num", text: x.value }), el("td", { text: x.counted ? "Yes" : "No" })))))) : null,
+      el("div", { class: "gov-pad" },
+        r.steps.length ? section("Calculation", el("p", { class: "muted", text: `Before ${U().fmtDate(r.baseline_window.start)} – ${U().fmtDate(r.baseline_window.end)} · after ${U().fmtDate(r.after_window.start)} – ${U().fmtDate(r.after_window.end)}` }), el("pre", { text: r.steps.join("\n") })) : null,
+        section("Limitations", list(r.limitations))),
+      el("div", { class: "card-foot" },
+        r.before_query ? el("button", { class: "btn", type: "button", text: "Before in Visualize", onclick: () => U().openQuery(r.before_query, `Before: ${r.title}`) }) : null,
+        r.after_query ? el("button", { class: "btn", type: "button", text: "After in Visualize", onclick: () => U().openQuery(r.after_query, `After: ${r.title}`) }) : null,
+        undo));
   }
 
   function setStatus(f, status) {
@@ -55,9 +101,10 @@
     const buttons = [];
     if (f.evidence_query) buttons.push(el("button", { class: "btn", type: "button", text: "Open evidence in Visualize",
       onclick: () => U().openQuery(f.evidence_query, `Evidence: ${f.title}, ${U().fmtDate(f.time_range.start)} – ${U().fmtDate(f.time_range.end)}`) }));
-    if (f.status !== "accepted" && f.action_plan) buttons.push(el("button", { class: "btn", type: "button", text: "Accept for planning", onclick: setStatus(f, "accepted") }));
-    if (f.status !== "dismissed") buttons.push(el("button", { class: "btn", type: "button", text: "Dismiss", onclick: setStatus(f, "dismissed") }));
-    if (f.status !== "open") buttons.push(el("button", { class: "btn", type: "button", text: "Reopen", onclick: setStatus(f, "open") }));
+    const done = f.status === "implemented";
+    if (!done && f.status !== "accepted" && f.action_plan) buttons.push(el("button", { class: "btn", type: "button", text: "Accept for planning", onclick: setStatus(f, "accepted") }));
+    if (!done && f.status !== "dismissed") buttons.push(el("button", { class: "btn", type: "button", text: "Dismiss", onclick: setStatus(f, "dismissed") }));
+    if (!done && f.status !== "open") buttons.push(el("button", { class: "btn", type: "button", text: "Reopen", onclick: setStatus(f, "open") }));
     return el("div", { class: "opt-detail", "data-detail": f.id },
       el("p", { class: "muted", text: `${f.change} · ${f.account} · ${f.region} · source: ${f.source} · effort: ${effortText(f.effort)}` }),
       f.overlaps.length && f.phase === "alternative" ? el("div", { class: "notice neutral", text: "This competes with another recommendation on the same resource. Only one can be done, so this one is not counted." }) : null,
@@ -69,6 +116,7 @@
       f.limitations.length ? section("Limitations", list(f.limitations)) : null,
       f.action_plan ? planBlock(f.action_plan) : section("Next step", el("p", { text: f.next_step })),
       el("p", { class: "muted", text: `Realised saving: ${f.realised.display}. ${f.realised.detail}` }),
+      !done && f.status !== "dismissed" && MARKABLE.includes(f.phase) ? markForm(f) : null,
       el("div", { class: "card-foot" }, buttons));
   }
 
@@ -143,7 +191,9 @@
     const t = s.totals;
     const inTab = f => local.tab === "all" ? f.status !== "dismissed" : local.tab === "dismissed" ? f.status === "dismissed" : f.phase === local.tab && f.status !== "dismissed";
     const counts = Object.fromEntries(TABS.map(([k]) => { const was = local.tab; local.tab = k; const n = s.opportunities.filter(inTab).length; local.tab = was; return [k, n]; }));
-    const items = s.opportunities.filter(inTab);
+    const changes = s.verification.results;
+    counts.realised = changes.length;
+    const items = local.tab === "realised" ? [] : s.opportunities.filter(inTab);
     const tabs = el("div", { class: "tabs opt-tabs", role: "tablist" }, TABS.map(([k, label]) =>
       el("button", { type: "button", class: local.tab === k ? "on" : "", role: "tab", "aria-selected": String(local.tab === k),
                      text: `${label} (${counts[k]})`, onclick: () => { local.tab = k; render(); } })));
@@ -156,7 +206,12 @@
         el("div", { class: "notice neutral", text: `The sources add up to ${t.raw_display}. That is not a savings number: it includes ${t.alternative_display} of competing alternatives, ${t.unverified_display} without enough evidence, the conditional amount, and the unadjusted commitment.` })),
       s.snapshot.notes.length ? el("div", { class: "notice" }, list(s.snapshot.notes)) : null,
       el("div", { class: "summary-row" }, tabs),
-      items.length ? table(items) : el("div", { class: "empty-pins" }, el("p", { text: "Nothing in this list." })),
+      local.tab === "realised" ? [
+        el("div", { class: "notice neutral", text: "Realised amounts are measured from CUR and are never added to estimates. In the demo, every result is a planted synthetic story, not proof of real savings." }),
+        changes.length ? changes.map(realisedCard) : el("div", { class: "empty-pins" }, el("p", { text: "No change has been recorded yet." }), el("p", { class: "muted", text: "Open a finding and record it after a person has made the change." })),
+        el("details", { class: "calc panel" }, el("summary", { text: "How realised savings are measured" }),
+          el("div", { class: "calc-body" }, el("dl", {}, Object.entries(s.verification.method).map(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]))))]
+        : items.length ? table(items) : el("div", { class: "empty-pins" }, el("p", { text: "Nothing in this list." })),
       el("details", { class: "calc panel" }, el("summary", { text: "Data quality checks" }),
         el("div", { class: "calc-body" }, el("dl", {}, s.data_quality.map(c => [el("dt", { text: c.check }), el("dd", {}, pill(c.state === "ok" ? "on_track" : "acknowledged", c.state), " ", c.detail)])))),
       el("details", { class: "calc panel" }, el("summary", { text: "How savings are counted" }),

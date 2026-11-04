@@ -358,6 +358,11 @@ details.calc summary::-webkit-details-marker { display: none; }
 .st-gr_in_review { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
 .st-gr_approved { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
 .st-gr_rejected { background: var(--err-bg); color: var(--err-ink); border-color: transparent; }
+.opt-mark-form { grid-template-columns: 150px 1fr auto; }
+.st-opt_implemented, .st-verified { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.st-provisional, .st-partly_realised { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
+.st-not_realised { background: var(--err-bg); color: var(--err-ink); border-color: transparent; }
+.st-waiting, .st-cannot_verify { background: var(--surface-2); color: var(--ink-2); }
 @media (max-width: 640px) {
-  .gov-form { grid-template-columns: 1fr; }
+  .gov-form, .opt-mark-form { grid-template-columns: 1fr; }
 }

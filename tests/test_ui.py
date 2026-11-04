@@ -375,3 +375,72 @@ def test_govern_mobile_has_no_horizontal_scroll(browser, app_url):
     pg.locator(".opt-tabs button", has_text="Guardrail drafts").click()
     pg.wait_for_selector("[data-guardrail]")
     assert pg.evaluate("document.documentElement.scrollWidth") <= 375
+
+
+@pytest.fixture()
+def savings_page(browser, savings_db_path):
+    httpd = serve(str(savings_db_path), "127.0.0.1", 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    pg = browser.new_page(viewport={"width": 1300, "height": 900})
+    pg.errors = []
+    pg.on("pageerror", lambda e: pg.errors.append(str(e)))
+    pg.goto(f"http://127.0.0.1:{httpd.server_address[1]}")
+    pg.wait_for_selector(".data-card .dc-head")
+    yield pg
+    httpd.shutdown()
+    httpd.server_close()
+
+
+def open_realised(pg):
+    pg.click(".nav-item[data-view=optimize]")
+    pg.wait_for_selector("[data-opportunity]")
+    pg.locator(".opt-tabs button", has_text="Realised").click()
+
+
+def test_realised_tab_shows_states_and_stays_apart(savings_page):
+    open_realised(savings_page)
+    expect(savings_page.locator("[data-change]")).to_have_count(9)
+    text = savings_page.locator("#optimizePage").inner_text()
+    for s in ("Verified", "Partly realised", "Not realised", "Cannot verify", "Provisional", "Waiting", "never added to estimates"):
+        assert s in text, s
+    assert "$735.85" in savings_page.locator(".opt-totals").inner_text()
+    assert not savings_page.errors
+
+
+def test_realised_card_shows_split_and_evidence_link(savings_page):
+    open_realised(savings_page)
+    card = savings_page.locator("[data-change]", has_text="Rightsize: i-0c0a0000m6i")
+    expect(card).to_contain_text("Commitment effect")
+    expect(card).to_contain_text("-$33.87")
+    card.get_by_role("button", name="After in Visualize").click()
+    savings_page.wait_for_selector(".card .chart-wrap svg")
+    assert savings_page.locator("#topbarTitle").inner_text() == "Visualize"
+
+
+def test_record_and_undo_on_the_main_demo(page):
+    open_optimize(page)
+    expect(page.locator(".opt-totals")).to_contain_text("$3,272.06")
+    page.locator("[data-opportunity]").first.click()
+    d = page.locator(".opt-detail").first
+    d.locator("summary", has_text="Record that this was done").click()
+    d.get_by_label("Date implemented").fill("2026-10-20")
+    d.get_by_role("button", name="Record as implemented").click()
+    card = page.locator("[data-change]")
+    expect(card).to_have_count(1)
+    expect(page.locator(".opt-totals")).to_contain_text("$2,537.68")
+    card.get_by_role("button", name="Undo record").click()
+    expect(page.locator(".opt-totals")).to_contain_text("$3,272.06")
+
+
+def test_realised_tab_on_mobile(browser, savings_db_path):
+    httpd = serve(str(savings_db_path), "127.0.0.1", 0)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    pg = browser.new_page(viewport={"width": 375, "height": 800})
+    pg.goto(f"http://127.0.0.1:{httpd.server_address[1]}")
+    pg.wait_for_selector(".suggestion")
+    pg.click("#menuBtn")
+    open_realised(pg)
+    pg.wait_for_selector("[data-change]")
+    assert pg.evaluate("document.documentElement.scrollWidth") <= 375
+    httpd.shutdown()
+    httpd.server_close()

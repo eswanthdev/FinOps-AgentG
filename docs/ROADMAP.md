@@ -40,6 +40,10 @@ locally. Remaining: test against real exports, Compute Optimizer evidence beyond
 
 ## Stage 4 — Savings verification
 
+First slice done on synthetic data: recorded changes, per-action measuring, rate, usage and commitment effects, overlap
+handling and result states, in a separate demo scenario. Remaining: commitment purchases, suggesting changes seen in CUR,
+testing on real billing.
+
 - Baselines chosen per action (pre-change window, normalised for usage), discount and commitment effects
   separated, overlapping actions attributed once. Estimated vs realised savings always shown separately.
 

@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from costlens import fixtures, store
+from costlens.agent import verify
 from costlens.ingest.governance import load_governance
 from costlens.ingest.loader import ingest_source
 from costlens.ingest.optimization import ingest_optimization
@@ -45,6 +46,31 @@ def demo_db_path(tmp_path, fixture_root) -> Path:
     load_demo(conn, fixture_root)
     conn.close()
     return path
+
+
+@pytest.fixture(scope="session")
+def savings_template(tmp_path_factory, fixture_root) -> Path:
+    """The savings scenario, built once. Tests get a copy."""
+    path = tmp_path_factory.mktemp("savings") / "template.sqlite"
+    conn = store.connect(path)
+    load_demo(conn, fixture_root)
+    verify.load_savings_scenario(conn, fixture_root)
+    conn.close()
+    return path
+
+
+@pytest.fixture()
+def savings_db_path(tmp_path, savings_template) -> Path:
+    path = tmp_path / "savings.sqlite"
+    shutil.copy(savings_template, path)
+    return path
+
+
+@pytest.fixture()
+def savings_conn(savings_db_path):
+    conn = store.connect(savings_db_path)
+    yield conn
+    conn.close()
 
 
 def copy_deliveries(root: Path, dest: Path, names: list[str]) -> Path:

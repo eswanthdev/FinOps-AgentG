@@ -206,3 +206,43 @@ Each policy is `{id, name, kind, params}`. Unknown fields are rejected. There is
 | Exception | needs owner, reason, expiry within 365 days; active through its expiry date |
 
 The AWS limits above were written from memory of the AWS documentation. Confirm them before any real use.
+
+## 8. Savings verification
+
+### Recorded change (`opt_changes`)
+
+| Field | Meaning |
+|---|---|
+| finding_id, recommendation_id, title | which finding was acted on |
+| account_id, resource_id, action, recommended | frozen when recorded, so a later snapshot cannot change them |
+| estimate_nanos | the source estimate, frozen when recorded |
+| implemented_on | `YYYY-MM-DD`, not in the future; one change per resource per day |
+| note | optional, at most 500 characters |
+
+Only Plan ready, Conditional and Alternative findings can be recorded. Realised numbers are never stored.
+
+### Rules
+
+| Rule | Value |
+|---|---|
+| Baseline | up to 14 days before the change, never before a previous change on the resource |
+| Measured period | at least 7 days; ends at the next change on the resource; final billing used when it gives 7 days |
+| Usage measured from | `line_item_usage_amount` on Usage and SavingsPlanCoveredUsage rows |
+| Expected, no change | baseline cost x after days / baseline days |
+| Expected, old rate | baseline cost x after usage / baseline usage |
+| Usage effect | expected no change - expected old rate |
+| Rate effect | expected old rate - actual |
+| Credited | Stop, Delete: both effects. Others: rate effect only |
+| Commitment effect | daily growth in unused Savings Plan commitment, for covered resources, deducted once by date |
+| Credits, refunds | shown, not counted |
+| Verified | at least 80% of the estimate on final billing, and the expected change shows in CUR |
+| Partly realised | 5% to 80% of the estimate, or the expected change does not show in CUR |
+| Not realised | below 5% of the estimate |
+| Provisional | measured on billing that is not final |
+| Waiting | fewer than 7 days after the change |
+| Cannot verify | missing month, short baseline, charges that cannot be amortized, or no usage after a non-stop change |
+
+### Savings scenario (`demo --scenario savings`)
+
+A separate database. It records 9 changes on the normal fixtures, then loads `<root>/after-changes/`: November final and
+December month-to-date, through 15 Dec 2026. Reference date 16 Dec 2026. Every outcome is planted.
