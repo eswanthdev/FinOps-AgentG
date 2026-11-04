@@ -1,8 +1,11 @@
-# CostLens synthetic demo. Standard library only, so nothing is installed.
+# CostLens synthetic demo. Standard library only unless built with WITH_BEDROCK=true.
 FROM python:3.13-slim
 
+ARG WITH_BEDROCK=false
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
+
+RUN if [ "$WITH_BEDROCK" = "true" ]; then pip install --no-cache-dir "anthropic[bedrock]"; fi
 
 RUN useradd --uid 10001 --create-home costlens \
     && mkdir /data \

@@ -28,7 +28,8 @@ from .store import connect, utc_now
 
 WEB_DIR = Path(__file__).parent / "web"
 STATIC = {"app.js": "text/javascript", "styles.css": "text/css", "charts.js": "text/javascript", "features.js": "text/javascript",
-          "optimize.js": "text/javascript", "govern.js": "text/javascript"}
+          "optimize.js": "text/javascript", "govern.js": "text/javascript",
+          "investigate.js": "text/javascript"}
 MAX_BODY = 64 * 1024
 _HOST_RE = re.compile(r"^(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$")
 CSP = ("default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "

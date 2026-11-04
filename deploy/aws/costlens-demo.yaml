@@ -26,6 +26,14 @@ Parameters:
   BudgetEmail:
     Type: String
     Description: Who gets the monthly cost alert
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-opus-5-5
+    Description: Model the investigator uses
+  BedrockModelArn:
+    Type: String
+    Description: ARN of that model, from the Bedrock console. The server role can call this model only.
+    AllowedPattern: "^arn:aws:bedrock.*"
   MonthlyBudgetUsd:
     Type: Number
     Default: 60
@@ -131,6 +139,9 @@ Resources:
                 Action: [ecr:BatchCheckLayerAvailability, ecr:BatchGetImage, ecr:GetDownloadUrlForLayer]
                 Resource: !Ref RepositoryArn
               - Effect: Allow
+                Action: bedrock-mantle:CreateInference
+                Resource: !Ref BedrockModelArn
+              - Effect: Allow
                 Action: [logs:CreateLogStream, logs:PutLogEvents]
                 Resource: !Sub "${LogGroup.Arn}:*"
   ServerProfile:
@@ -149,7 +160,7 @@ Resources:
       LaunchTemplateData:
         MetadataOptions:
           HttpTokens: required
-          HttpPutResponseHopLimit: 1
+          HttpPutResponseHopLimit: 2  # the container needs the server role, for the Bedrock call
   Server:
     Type: AWS::EC2::Instance
     DependsOn: DefaultRoute
@@ -183,6 +194,7 @@ Resources:
           aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin "$registry"
           docker run -d --name costlens --restart unless-stopped -p 8765:8765 -v /data:/data \
             -e COSTLENS_BEHIND_AUTH_PROXY=true -e COSTLENS_ALLOWED_HOSTS=${DomainName} -e COSTLENS_LOG_LEVEL=INFO \
+            -e COSTLENS_MODEL_PROVIDER=bedrock -e COSTLENS_BEDROCK_REGION=${AWS::Region} -e COSTLENS_BEDROCK_MODEL=${BedrockModelId} \
             --log-driver awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=${LogGroup} \
             '${ImageUri}'
 

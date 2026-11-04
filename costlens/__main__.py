@@ -100,7 +100,21 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8765)
 
+    e = sub.add_parser("eval-agent", help="run the evaluation questions. Calls a paid model.")
+    e.add_argument("--db", required=True)
+
     a = p.parse_args(argv)
+    if a.cmd == "eval-agent":
+        from .agent import agent_eval, investigator
+        client = investigator.make_client()
+        if client is None:
+            print("No model is configured. Set COSTLENS_MODEL_PROVIDER=bedrock and install the bedrock extra.", file=sys.stderr)
+            return 1
+        conn = connect(a.db)
+        report = agent_eval.run(conn, client)
+        conn.close()
+        print(json.dumps(report, indent=2))
+        return 0 if report["passed"] == report["total"] else 1
     if a.cmd == "generate-fixtures":
         out = fixtures.generate(a.out)
         print(f"Synthetic fixtures in {out}")

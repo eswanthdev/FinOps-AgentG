@@ -1,7 +1,7 @@
 # CostLens (working name)
 
 Evidence-backed FinOps agent for AWS. Original product; do not copy any other vendor's code, branding, wording or screens.
-Everything runs locally on synthetic CUR 2.0 fixtures. No real AWS access. No AI model ("Deterministic mode").
+Everything runs locally on synthetic CUR 2.0 fixtures. No real AWS access. "Deterministic mode" is the default; the Bedrock investigator is optional and has never run live.
 
 ## Run and test
 
@@ -11,7 +11,7 @@ Needs Python 3.11+. Standard library only at runtime.
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens demo --scenario savings --reset-db   # separate demo with billing after recorded changes
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 418 passed
+python -m pytest -q                              # expected: 479 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 
@@ -26,6 +26,7 @@ Do not edit tests just to make them pass.
 - `costlens/query/model.py` - `CostQuery`, the only query shape. `query/engine.py` runs it (explore, variance, coverage).
 - `costlens/agent/` - `interpreter.py` (deterministic text -> CostQuery), `orchestrator.py` (routes to workers; per-worker tool allow-list; audit).
 - `costlens/agent/optimize.py` - Cost Optimization Engineer workers and savings rules. `costlens/ingest/optimization.py` - COH and Compute Optimizer snapshots.
+- `costlens/agent/investigator.py` - optional model tool loop with read-only tools and the number check. `agent_eval.py` - evaluation questions.
 - `costlens/agent/verify.py` - savings verification: change records, baseline, attribution, result states.
 - `costlens/agent/govern.py` - Governance workers, guardrail drafts, workflow, exceptions. `costlens/ingest/governance.py` - organization file and typed policies.
 - `costlens/anomalies.py`, `budgets.py`, `notify.py` (outbox by default, SMTP via env vars).
@@ -49,6 +50,8 @@ Sidebar order: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting.
 - Never add up overlapping savings. Keep estimated savings separate from realised savings.
 - If evidence is not enough, say so. Do not invent findings or numbers.
 - Realised savings are computed from CUR, never stored and never added to estimates. Usage drops are not credited to a rightsizing change.
+- The model never calculates money and never gets a tool that writes. Do not weaken `check_answer` or add write tools to the investigator.
+- Calling Bedrock or running `eval-agent` costs money and needs approval each time.
 - Guardrails are drafts only. "Approved" records a decision; no code path may apply anything to AWS.
 - Match surrounding code style. Add tests with every change.
 
@@ -56,7 +59,7 @@ Sidebar order: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting.
 
 - Do not create or change AWS resources, IAM roles, billing exports or paid services. No AWS API call without separate, explicit user approval.
 - Never ask the user to paste credentials, secrets or tokens into chat or code. SMTP and AWS settings come only from environment variables.
-- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/hosting-prep`, from local `main`). There is no remote yet.
+- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/investigator-agent`, on top of `feature/hosting-prep`). There is no remote yet. AWS region: `eu-central-1`.
 - Do not delete or overwrite existing work. Ask before any destructive action.
 - Do not install new third-party packages without asking.
 - Be honest about what is implemented, tested, simulated, or only planned. Never present estimates as real savings.

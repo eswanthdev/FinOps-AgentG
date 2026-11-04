@@ -26,6 +26,10 @@
 | Policies are typed with a fixed set of kinds; unknown fields are rejected and bad files change nothing | `ingest/governance.py` |
 | Guardrail status changes, exceptions and policy on/off are audited; an approved draft that changes loses its approval | `agent/govern.py`, `server.py` |
 | Verification is read-only: recording or undoing a change is audited and touches no AWS resource | `agent/verify.py`, `server.py` |
+| Investigator tools are a fixed read-only allow-list; input is validated as a typed `CostQuery` | `agent/investigator.py` |
+| Answers are rejected if any amount or percentage is not in a tool result the model saw | `agent/investigator.py` |
+| Billing text reaches the model only inside tool results; it cannot widen the tool list. Traces are redacted | `agent/investigator.py` |
+| Model answers are inserted with `textContent`; runs and tool calls are audited; each run has hard limits | `web/investigate.js`, `agent/investigator.py` |
 | Audit retention purge on server start (`COSTLENS_AUDIT_RETENTION_DAYS`, default 90) | `store.purge_audit` |
 
 ## Designed, not implemented
@@ -49,8 +53,8 @@
   isolation tests. Today: one SQLite file = one tenant, nothing more.
 - **Encryption**: at rest (KMS / SQLCipher or managed DB), TLS in transit. Today: none (local file, localhost HTTP).
 - **Authentication and roles**: SSO (OIDC/SAML), roles per dataset and account. Today: none (local single user).
-- **Model safety** (when a model is added): imported data and tool output passed only as quoted data, never as
-  instructions; model output accepted only as a validated `CostQuery` or a typed plan; no secrets in prompts;
-  prompt and response logging with redaction; provider configurable per tenant, including in-account options.
+- **Model safety, still to do**: provider configurable per tenant, full prompt and response logging with redaction, and a
+  company review before real billing data reaches a model. Prompt injection can still mislead the written answer, even
+  though it cannot change state or numbers. The controls above have only been tested with a fake model.
 - **Remediation**: never in Visualize. Later phases only produce reviewable plans; any change needs explicit
   human approval per action, and automatic remediation is a separately approved future capability.

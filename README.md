@@ -31,6 +31,25 @@ python -m costlens status --db ./my.sqlite
 python -m costlens serve --db ./my.sqlite --port 8765
 ```
 
+## Investigating agent (Claude on Amazon Bedrock)
+
+Written and tested with a fake model. **It has never called Bedrock.** It stays off unless `COSTLENS_MODEL_PROVIDER=bedrock`
+is set and the optional package is installed (`pip install "costlens[bedrock]"`). Off means Deterministic mode, as before.
+
+When on, a model chooses from eight read-only tools across Visualize, Anomalies, Budgets, Optimize, Govern and realised
+savings, follows the evidence, and writes the answer. Each answer shows what the agent did and links to the evidence.
+
+- **Numbers:** every amount and percentage in the answer must match a tool result. The model gets one chance to fix a
+  mismatch; after that the answer is rejected.
+- **Read-only:** no tool can change a status, approve, record a change or touch AWS. Budget creation keeps its preview flow.
+- **Limits:** 8 model turns, 16 tool calls, 300,000 tokens and 150 seconds per question.
+- **Fallback:** on any failure the app answers from fixed rules and says so.
+- **Settings:** `COSTLENS_BEDROCK_REGION` (default `eu-central-1`), `COSTLENS_BEDROCK_MODEL` (default `anthropic.claude-opus-5-5`).
+- **Evaluation:** `python -m costlens eval-agent --db <demo db>` runs 20 questions. It calls a paid model.
+
+Synthetic data only for now. The numbers are checked; the model's reasoning and conclusions are not, so a person should
+read them as a starting point. Follow-up questions see only the previous query, not the whole conversation.
+
 ## Hosting on AWS
 
 Prepared, **not deployed and not validated by AWS**. See [deploy/aws/RUNBOOK.md](deploy/aws/RUNBOOK.md). The target is the
@@ -170,7 +189,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
   `S3ExportSource` exists only as a documented interface and raises `NotImplementedError`.
 - Real Cost Optimization Hub and Compute Optimizer exports: the fixtures use a subset of their column names and
   have not been tested against real files.
-- Any AI model. `COSTLENS_MODEL_PROVIDER` is read only to say that model mode is not implemented.
+- Any tested AI model connection: the Bedrock client has never run against AWS.
 - Compute Optimizer evidence for anything except EC2 (so RDS findings stay "needs evidence"). Verification of commitment
   purchases.
 - Any enforcement: CostLens never applies an SCP or tag policy. Real approvals with identity need SSO. AWS Budgets
@@ -183,7 +202,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 418 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 479 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

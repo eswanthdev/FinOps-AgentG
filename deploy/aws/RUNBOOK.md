@@ -8,18 +8,18 @@ in code or chat: sign in on your own machine with `aws sso login`.
 
 ## What you need first
 
-- A separate non-production AWS account, region `ap-south-1`.
+- A separate non-production AWS account, region `eu-central-1`.
 - The AWS CLI v2 and Docker on the machine that deploys.
 - A domain or subdomain whose DNS you control, for example `costlens.example.com`.
 
 ## 1. Certificate
 
-Request an ACM certificate for the domain in `ap-south-1`, add the DNS validation record, and wait until it is issued.
+Request an ACM certificate for the domain in `eu-central-1`, add the DNS validation record, and wait until it is issued.
 
 ## 2. Image repository
 
 ```bash
-aws cloudformation deploy --region ap-south-1 --stack-name costlens-ecr --template-file deploy/aws/costlens-ecr.yaml
+aws cloudformation deploy --region eu-central-1 --stack-name costlens-ecr --template-file deploy/aws/costlens-ecr.yaml
 ```
 
 ## 3. Build and push the image
@@ -27,16 +27,20 @@ aws cloudformation deploy --region ap-south-1 --stack-name costlens-ecr --templa
 Tags are immutable, so use a new tag for every build, such as the short commit id. Build for `linux/amd64`.
 
 ```bash
-aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.ap-south-1.amazonaws.com
-docker build --platform linux/amd64 -t <repository-uri>:<tag> .
+aws ecr get-login-password --region eu-central-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.eu-central-1.amazonaws.com
+docker build --platform linux/amd64 --build-arg WITH_BEDROCK=true -t <repository-uri>:<tag> .
 docker push <repository-uri>:<tag>
 ```
 
 ## 4. Main stack
 
 ```bash
-aws cloudformation deploy --region ap-south-1 --stack-name costlens-demo --template-file deploy/aws/costlens-demo.yaml --capabilities CAPABILITY_IAM --parameter-overrides DomainName=<domain> CertificateArn=<arn> ImageUri=<repository-uri>:<tag> RepositoryArn=<arn> CognitoDomainPrefix=<prefix> BudgetEmail=<email>
+aws cloudformation deploy --region eu-central-1 --stack-name costlens-demo --template-file deploy/aws/costlens-demo.yaml --capabilities CAPABILITY_IAM --parameter-overrides DomainName=<domain> CertificateArn=<arn> ImageUri=<repository-uri>:<tag> RepositoryArn=<arn> CognitoDomainPrefix=<prefix> BudgetEmail=<email> BedrockModelArn=<model-arn>
 ```
+
+Before this step, enable the model in the Bedrock console in `eu-central-1` and copy its ARN. Model calls are paid per use.
+The docs list the Frankfurt global endpoint and an EU inference profile. Confirm which one the default model ID uses, and
+that the `bedrock-mantle:CreateInference` permission works with that ARN.
 
 Point the domain at the `LoadBalancerDns` output with a CNAME record.
 
@@ -54,6 +58,8 @@ Sign-up is off. Add each person in the Cognito user pool. Cognito sends them a t
 - [ ] Logs appear in the `/costlens/demo` log group.
 - [ ] A daily snapshot appears after the first scheduled run.
 - [ ] The budget alert email address is right.
+- [ ] The top bar says "AI-assisted mode", and a question shows "What the agent did".
+- [ ] With the model turned off, answers fall back to fixed rules and say so.
 
 ## Update
 
@@ -68,7 +74,7 @@ Run the previous image tag the same way. If the server is lost, restore a snapsh
 ## Remove everything
 
 ```bash
-aws cloudformation delete-stack --region ap-south-1 --stack-name costlens-demo
+aws cloudformation delete-stack --region eu-central-1 --stack-name costlens-demo
 ```
 
 The ECR stack needs its images deleted first. Snapshots made by the lifecycle policy stay until they are deleted by hand.

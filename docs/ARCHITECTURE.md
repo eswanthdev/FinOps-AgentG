@@ -39,6 +39,9 @@
 - **Orchestrator**: routes a request to a worker. Active workers: `visualization`, `optimize`, `govern`, `anomalies`,
   `budgets` (budget, governance, savings, anomaly and forecast requests are routed before the cost interpreter).
   `PLANNED_WORKERS` is empty today.
+- **Investigator** (`agent/investigator.py`): optional. A model drives a bounded tool loop over eight read-only tools that
+  reach every module. `ModelClient` is the only model boundary, so tests use a fake. Answers pass a check that every
+  amount and percentage came from a tool. On any failure `Orchestrator.ask` falls back to the deterministic path.
 - **Governance pipeline** (`agent/govern.py`): four workers with fixed tool allow-lists. Policy check evaluates typed
   policies through a `CostQuery`; impact simulates a guardrail on billing data and links Optimize findings; risk adds
   risks and limits; guardrail drafting writes JSON as text. No code path applies anything.

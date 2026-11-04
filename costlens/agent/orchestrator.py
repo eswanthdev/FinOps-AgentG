@@ -10,6 +10,7 @@ is called: the orchestrator is deterministic code and says so in every reply.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -55,11 +56,17 @@ def redact(text: str) -> str:
 
 
 def model_mode() -> dict:
-    provider = os.environ.get("COSTLENS_MODEL_PROVIDER", "").strip()
+    provider = os.environ.get("COSTLENS_MODEL_PROVIDER", "").strip().lower()
+    if provider == "bedrock":
+        if importlib.util.find_spec("anthropic"):
+            return {"mode": "model", "label": "AI-assisted mode",
+                    "detail": "A model chooses read-only tools and writes the answer. Every number comes from code. "
+                              "If the model fails, answers fall back to fixed rules."}
+        return {"mode": "deterministic", "label": "Deterministic mode",
+                "detail": "Bedrock is selected but the optional package is not installed. Running fixed rules only."}
     if provider:
         return {"mode": "deterministic", "label": "Deterministic mode",
-                "detail": f"Model provider '{provider}' is configured but model-backed interpretation is not "
-                          "implemented in this release. Running deterministic rules only."}
+                "detail": f"Model provider '{provider}' is not supported. Running deterministic rules only."}
     return {"mode": "deterministic", "label": "Deterministic mode",
             "detail": "No AI model is configured. Questions are interpreted by fixed rules and every number is "
                       "computed by code."}
@@ -228,7 +235,30 @@ class Orchestrator:
         return f"Set up a {period} budget of ${dollars:,}{scope} and alert me at 80% and 100%"
 
     def ask(self, question: str, previous: dict | None = None) -> dict:
+        """Use the investigator when a model is configured. Budget creation stays on its reviewed preview flow."""
+        from .. import budgets
+        from . import investigator
         question = (question or "")[:2000]
+        if not question.strip() or budgets.is_budget_request(question):
+            return self._ask_deterministic(question, previous)
+        client = investigator.make_client()
+        if client is None:
+            return self._ask_deterministic(question, previous)
+        result = investigator.investigate(self.conn, client, question, previous)
+        if result["status"] == "ok":
+            self.audit.record("question.received", {"question": redact(question[:500]), "interpretation": "investigation",
+                                                    "module": "investigator"})
+            response = investigator.reply(result)
+            response["mode"] = model_mode()
+            response["interpretation"] = {"status": "ok", "module": "investigator", "understood": [], "assumptions": [], "query": None}
+            response["result"] = None
+            return response
+        response = self._ask_deterministic(question, previous)
+        response["model_note"] = f"{result['note']} This answer comes from fixed rules."
+        response["mode"] = {"mode": "deterministic", "label": "Deterministic mode", "detail": result["note"]}
+        return response
+
+    def _ask_deterministic(self, question: str, previous: dict | None = None) -> dict:
         qhash = hashlib.sha256(question.encode()).hexdigest()[:16]
         special = self._special(question) if question.strip() else None
         if special:

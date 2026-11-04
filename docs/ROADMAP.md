@@ -20,7 +20,7 @@ seasonality-aware forecast (weekday pattern, month-start charges), optional sync
 
 Local preparation is done: container, host setting, health check, CloudFormation templates and a runbook. Next, with
 approval for each step: a private GitHub repo, then an AWS account, domain, certificate and first deployment. See
-`deploy/aws/RUNBOOK.md`. Real data is Stage 2 and needs its own plan.
+`deploy/aws/RUNBOOK.md`. Real data is Stage 2 and needs its own plan. Region: Frankfurt (`eu-central-1`).
 
 ## Stage 2 — Live read-only AWS pilot (needs your approval for AWS access)
 
@@ -66,6 +66,9 @@ verified approvals (need SSO, Stage 6).
   separate approval and a trust period.
 
 ## Stage 6 — Production hardening and model-backed investigation
+
+The investigator is built and tested with a fake model, ahead of the rest of this stage by decision. Next, with approval:
+a first live run on Bedrock in Frankfurt, the 20-question evaluation, and a measured cost per question.
 
 - SSO, roles, tenant isolation, encryption, retention settings, security review.
 - Configurable model provider for interpretation and narrative, constrained to typed tools and validated output.

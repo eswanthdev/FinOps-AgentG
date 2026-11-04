@@ -151,7 +151,9 @@ def test_healthz_reports_a_broken_database(tmp_path):
 
 def test_dockerfile_runs_as_non_root_with_no_installs():
     text = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    assert "USER costlens" in text and "pip install" not in text
+    assert "USER costlens" in text
+    assert re.findall(r"pip install.*", text) == ['pip install --no-cache-dir "anthropic[bedrock]"; fi']  # only when asked for
+    assert 'WITH_BEDROCK=false' in text
     assert text.index("USER costlens") < text.index("CMD [\"python\", \"-m\"")
 
 
@@ -193,6 +195,18 @@ def test_server_role_has_no_broad_or_billing_access():
     assert not re.search(r"(?<![\w:])(ce|cur|s3|organizations|iam|ec2|budgets):", role)  # action names, not ARNs
     assert role.count('Resource: "*"') == 1  # ecr:GetAuthorizationToken has no resource-level form
     assert "Action: ecr:GetAuthorizationToken\n                Resource: \"*\"" in role
+
+
+def test_server_can_call_only_the_chosen_model():
+    role = block("ServerRole")
+    assert "Action: bedrock-mantle:CreateInference\n                Resource: !Ref BedrockModelArn" in role
+    assert "HttpPutResponseHopLimit: 2" in TEMPLATE
+    assert "COSTLENS_MODEL_PROVIDER=bedrock" in TEMPLATE
+
+
+def test_runbook_uses_frankfurt():
+    text = (ROOT / "deploy" / "aws" / "RUNBOOK.md").read_text(encoding="utf-8")
+    assert "eu-central-1" in text and "ap-south-1" not in text
 
 
 def test_template_passes_the_settings_the_app_needs():

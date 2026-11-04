@@ -444,3 +444,41 @@ def test_realised_tab_on_mobile(browser, savings_db_path):
     assert pg.evaluate("document.documentElement.scrollWidth") <= 375
     httpd.shutdown()
     httpd.server_close()
+
+def test_investigation_card_shows_answer_trace_and_evidence(page, monkeypatch):
+    from costlens.agent import investigator
+    from costlens.agent.investigator import ModelTurn
+    query = {"kind": "explore", "start": "2026-10-01", "end": "2026-11-01", "metric": "unblended", "granularity": "total", "group_by": "service",
+             "filters": [], "top_n": 5, "compare_start": "", "compare_end": ""}
+
+    class Fake:
+        turns = [ModelTurn("tool_use", [{"type": "tool_use", "id": "t1", "name": "query_costs", "input": query}], 1, 1),
+                 ModelTurn("end_turn", [{"type": "text", "text": "<img src=x onerror=\"window.__xss=1\"> October cost $18,561.93."}], 1, 1)]
+
+        def create(self, *_):
+            return self.turns.pop(0)
+
+    monkeypatch.setattr(investigator, "make_client", lambda: Fake())
+    send(page, "What was the October bill?")
+    page.wait_for_selector(".inv-answer")
+    assert "Investigation" in page.locator(".module-note").last.inner_text()
+    assert "$18,561.93" in page.locator(".inv-answer").inner_text()
+    assert page.evaluate("window.__xss") is None and page.locator(".inv-answer img").count() == 0
+    page.locator(".inv-trace summary").click()
+    assert "query_costs" in page.locator(".inv-trace").inner_text()
+    page.get_by_role("button", name="Open evidence").click()
+    page.wait_for_selector(".card .chart-wrap svg")
+    assert not page.errors
+
+
+def test_failed_model_shows_a_notice_and_a_rules_answer(page, monkeypatch):
+    from costlens.agent import investigator
+
+    class Down:
+        def create(self, *_):
+            raise investigator.ModelUnavailable("APIConnectionError")
+
+    monkeypatch.setattr(investigator, "make_client", lambda: Down())
+    send(page, "Show cost by service for last month")
+    page.wait_for_selector(".card .chart-wrap svg")
+    assert "fixed rules" in page.locator(".msg-body .notice").first.inner_text()

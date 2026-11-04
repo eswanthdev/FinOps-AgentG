@@ -87,6 +87,7 @@
       missing.length ? h("div", { class: "row" }, "Missing months", h("b", { class: "up", text: missing.join(", ") })) : null,
       s.delivery_issues.length ? h("div", { class: "row" }, "Rejected deliveries", h("b", { class: "up", text: String(s.delivery_issues.length) })) : null,
       h("button", { class: "link", type: "button", text: "View coverage and deliveries →", onclick: () => showView("data") }));
+    $("modePill").textContent = s.model.label;
     $("modePill").title = s.model.detail;
     $("modePill").setAttribute("aria-label", s.model.label + ". " + s.model.detail);
     $("dataPill").hidden = !s.synthetic;
@@ -177,6 +178,8 @@
   }
 
   function renderAssistant(body, resp) {
+    if (resp.model_note) body.appendChild(h("div", { class: "notice", text: resp.model_note }));
+    if (resp.kind === "investigation") { window.CostLensInvestigate.render(body, resp); return; }
     if (resp.kind === "optimize") { window.CostLensOptimize.renderChat(body, resp); followups(body, resp.suggestions); return; }
     if (resp.kind === "govern") { window.CostLensGovern.renderChat(body, resp); followups(body, resp.suggestions); return; }
     if (resp.kind) { window.CostLensFeatures.renderChatSpecial(body, resp); followups(body, resp.suggestions); return; }
