@@ -16,6 +16,12 @@ Next for this stage: background scheduler for alert checks, anomaly email subscr
 seasonality-aware forecast (weekday pattern, month-start charges), optional sync to real AWS Budgets
 (needs AWS write access and separate approval).
 
+## Stage 1c — Hosted synthetic demo (prepared, not deployed)
+
+Local preparation is done: container, host setting, health check, CloudFormation templates and a runbook. Next, with
+approval for each step: a private GitHub repo, then an AWS account, domain, certificate and first deployment. See
+`deploy/aws/RUNBOOK.md`. Real data is Stage 2 and needs its own plan.
+
 ## Stage 2 — Live read-only AWS pilot (needs your approval for AWS access)
 
 1. With a pilot customer, set up a CUR 2.0 Data Export to their own S3 bucket (customer does this).

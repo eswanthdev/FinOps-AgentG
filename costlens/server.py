@@ -1,7 +1,8 @@
 """Local HTTP server (Python standard library only).
 
 Binds to 127.0.0.1 by default. Defences for a local tool:
-  * Host header must be localhost/127.0.0.1/[::1] (blocks DNS-rebinding).
+  * Host header must be localhost/127.0.0.1/[::1], or a name in
+    COSTLENS_ALLOWED_HOSTS (blocks DNS-rebinding). See hosting.py.
   * POST/DELETE require Content-Type: application/json and a same-origin Origin
     when one is sent (blocks cross-site form posts).
   * Request bodies are capped; errors never include stack traces.
@@ -17,7 +18,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from . import anomalies, budgets, notify
+from . import anomalies, budgets, hosting, notify
 from .agent import govern, optimize, verify
 from .agent.orchestrator import ACTIVE_WORKERS, Orchestrator, PLANNED_WORKERS, model_mode
 from .query import engine
@@ -43,6 +44,8 @@ class ApiError(Exception):
 
 
 def make_handler(db_path: str, source_label: str):
+    extra_hosts = hosting.allowed_hosts()
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "CostLens"
         sys_version = ""
@@ -60,6 +63,8 @@ def make_handler(db_path: str, source_label: str):
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("X-Frame-Options", "DENY")
             self.send_header("Cache-Control", "no-cache" if cache else "no-store")
+            if extra_hosts:  # only ever reached over HTTPS through the login proxy
+                self.send_header("Strict-Transport-Security", "max-age=31536000")
             self.end_headers()
 
         def _json(self, status: int, payload) -> None:
@@ -68,8 +73,9 @@ def make_handler(db_path: str, source_label: str):
             self.wfile.write(body)
 
         def _check_host(self):
-            if not _HOST_RE.match(self.headers.get("Host", "")):
-                raise ApiError(421, "Requests must use localhost.")
+            host = self.headers.get("Host", "")
+            if not _HOST_RE.match(host) and host.rsplit(":", 1)[0].lower() not in extra_hosts:
+                raise ApiError(421, "Requests must use an allowed host.")
 
         def _body(self) -> dict:
             if not self.headers.get("Content-Type", "").startswith("application/json"):
@@ -111,6 +117,15 @@ def make_handler(db_path: str, source_label: str):
         # ---------------------------------------------------------- routes
         def do_GET(self):
             path = urlparse(self.path).path
+            if path == "/healthz":
+                # Load balancers call this by IP, so it skips the host check. It reveals no data.
+                try:
+                    conn = connect(db_path)
+                    conn.execute("SELECT 1").fetchone()
+                    conn.close()
+                except Exception:  # noqa: BLE001
+                    return self._json(503, {"status": "unavailable"})
+                return self._json(200, {"status": "ok"})
             if path == "/" or path == "/index.html":
                 try:
                     self._check_host()

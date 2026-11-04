@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-from . import fixtures
+from . import fixtures, hosting
 from .agent.verify import load_savings_scenario
 from .ingest.governance import load_governance
 from .ingest.loader import ingest_source
@@ -57,8 +57,9 @@ def _run_server(db: Path, host: str, port: int, label: str) -> None:
     conn.close()
     if removed:
         print(f"Purged {removed} audit events past the retention window.")
-    if host not in ("127.0.0.1", "localhost", "::1"):
-        print("Refusing to bind to a non-local address in this release.", file=sys.stderr)
+    if not hosting.bind_allowed(host):
+        print("Refusing to bind to a non-local address: the app has no login of its own. It needs "
+              "COSTLENS_BEHIND_AUTH_PROXY=true and COSTLENS_ALLOWED_HOSTS. See deploy/aws/RUNBOOK.md.", file=sys.stderr)
         sys.exit(2)
     httpd = serve(str(db), host, port, label)
     print(f"CostLens running at http://{host}:{port}  (Ctrl+C to stop)")
@@ -71,12 +72,13 @@ def _run_server(db: Path, host: str, port: int, label: str) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
+    logging.basicConfig(level=hosting.log_level(), format="%(levelname)s %(name)s: %(message)s")
     p = argparse.ArgumentParser(prog="costlens")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     d = sub.add_parser("demo", help="synthetic demo: fixtures + ingest + serve")
     d.add_argument("--data-dir", default="var")
+    d.add_argument("--host", default="127.0.0.1")
     d.add_argument("--port", type=int, default=8765)
     d.add_argument("--no-serve", action="store_true")
     d.add_argument("--reset-db", action="store_true", help="delete the demo database file first")
@@ -121,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
                 conn.close()
         if a.no_serve:
             return 0
-        _run_server(db, "127.0.0.1", a.port, "Synthetic fixtures (local folder)")
+        _run_server(db, a.host, a.port, "Synthetic fixtures (local folder)")
         return 0
     if a.cmd == "ingest":
         try:

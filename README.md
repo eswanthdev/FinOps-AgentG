@@ -31,6 +31,13 @@ python -m costlens status --db ./my.sqlite
 python -m costlens serve --db ./my.sqlite --port 8765
 ```
 
+## Hosting on AWS
+
+Prepared, **not deployed and not validated by AWS**. See [deploy/aws/RUNBOOK.md](deploy/aws/RUNBOOK.md). The target is the
+synthetic demo for one team: one private EC2 server behind an HTTPS load balancer with Cognito login. The app has no
+login of its own, so it refuses a non-local address unless `COSTLENS_BEHIND_AUTH_PROXY=true` and
+`COSTLENS_ALLOWED_HOSTS` are set. Only set these when a login proxy really is the only way in.
+
 ## Try these questions
 
 - Show cost by service for last month
@@ -176,7 +183,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 382 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 418 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

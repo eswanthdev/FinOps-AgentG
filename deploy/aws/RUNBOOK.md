@@ -1,0 +1,84 @@
+# Hosting the synthetic demo on AWS
+
+**Status: written, not run.** These templates have never been deployed or validated by AWS, and the image has never been
+built. Expect to fix small things on the first run. **Synthetic data only.** Do not load real billing data on this setup.
+
+Every step below creates or changes paid AWS resources. Each one needs explicit approval first. Do not put credentials
+in code or chat: sign in on your own machine with `aws sso login`.
+
+## What you need first
+
+- A separate non-production AWS account, region `ap-south-1`.
+- The AWS CLI v2 and Docker on the machine that deploys.
+- A domain or subdomain whose DNS you control, for example `costlens.example.com`.
+
+## 1. Certificate
+
+Request an ACM certificate for the domain in `ap-south-1`, add the DNS validation record, and wait until it is issued.
+
+## 2. Image repository
+
+```bash
+aws cloudformation deploy --region ap-south-1 --stack-name costlens-ecr --template-file deploy/aws/costlens-ecr.yaml
+```
+
+## 3. Build and push the image
+
+Tags are immutable, so use a new tag for every build, such as the short commit id. Build for `linux/amd64`.
+
+```bash
+aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin <account>.dkr.ecr.ap-south-1.amazonaws.com
+docker build --platform linux/amd64 -t <repository-uri>:<tag> .
+docker push <repository-uri>:<tag>
+```
+
+## 4. Main stack
+
+```bash
+aws cloudformation deploy --region ap-south-1 --stack-name costlens-demo --template-file deploy/aws/costlens-demo.yaml --capabilities CAPABILITY_IAM --parameter-overrides DomainName=<domain> CertificateArn=<arn> ImageUri=<repository-uri>:<tag> RepositoryArn=<arn> CognitoDomainPrefix=<prefix> BudgetEmail=<email>
+```
+
+Point the domain at the `LoadBalancerDns` output with a CNAME record.
+
+## 5. Add users
+
+Sign-up is off. Add each person in the Cognito user pool. Cognito sends them a temporary password.
+
+## 6. Check before sharing the link
+
+- [ ] `http://<domain>` redirects to HTTPS.
+- [ ] Opening the site asks for a login.
+- [ ] Port 8765 on the server's public IP does not answer.
+- [ ] The target group shows the server as healthy.
+- [ ] The app shows "Synthetic data" and "Deterministic mode".
+- [ ] Logs appear in the `/costlens/demo` log group.
+- [ ] A daily snapshot appears after the first scheduled run.
+- [ ] The budget alert email address is right.
+
+## Update
+
+Push a new tag, then open a session with `aws ssm start-session --target <ServerId>` and replace the container with the
+new image. Changing `ImageUri` on the stack alone does not do this, because the start script only runs on first boot.
+Expect a short outage.
+
+## Rollback
+
+Run the previous image tag the same way. If the server is lost, restore a snapshot.
+
+## Remove everything
+
+```bash
+aws cloudformation delete-stack --region ap-south-1 --stack-name costlens-demo
+```
+
+The ECR stack needs its images deleted first. Snapshots made by the lifecycle policy stay until they are deleted by hand.
+
+## Known limits
+
+- One server, so updates and failures cause downtime.
+- All users share one workspace and see each other's changes.
+- MFA is off in the template. Turn it on if your company requires it.
+- The login is not linked to app records, so "Approved" and "Implemented" stay unverified.
+- The server has a public IP for outbound traffic only. The security group is what blocks inbound access, and the app
+  trusts that, so never add an inbound rule to it.
+- Costs in the plan were estimates from memory. Check the AWS pricing calculator first.

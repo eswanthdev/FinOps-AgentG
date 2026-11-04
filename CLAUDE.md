@@ -11,7 +11,7 @@ Needs Python 3.11+. Standard library only at runtime.
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens demo --scenario savings --reset-db   # separate demo with billing after recorded changes
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 382 passed
+python -m pytest -q                              # expected: 418 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 
@@ -29,6 +29,7 @@ Do not edit tests just to make them pass.
 - `costlens/agent/verify.py` - savings verification: change records, baseline, attribution, result states.
 - `costlens/agent/govern.py` - Governance workers, guardrail drafts, workflow, exceptions. `costlens/ingest/governance.py` - organization file and typed policies.
 - `costlens/anomalies.py`, `budgets.py`, `notify.py` (outbox by default, SMTP via env vars).
+- `costlens/hosting.py`, `Dockerfile`, `deploy/aws/` - settings and files for the hosted demo. Prepared, never deployed. Follow `deploy/aws/RUNBOOK.md`; every AWS step needs approval.
 - `costlens/server.py` - localhost HTTP API + static UI in `costlens/web/` (plain JS/HTML/CSS).
 - Docs: `docs/ARCHITECTURE.md`, `DATA_CONTRACTS.md`, `SECURITY.md`, `ROADMAP.md`. Read them before changing anything.
 
@@ -55,7 +56,7 @@ Sidebar order: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting.
 
 - Do not create or change AWS resources, IAM roles, billing exports or paid services. No AWS API call without separate, explicit user approval.
 - Never ask the user to paste credentials, secrets or tokens into chat or code. SMTP and AWS settings come only from environment variables.
-- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/savings-verification`, stacked on `feature/governance-slice` and `feature/optimize-slice`).
+- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/hosting-prep`, from local `main`). There is no remote yet.
 - Do not delete or overwrite existing work. Ask before any destructive action.
 - Do not install new third-party packages without asking.
 - Be honest about what is implemented, tested, simulated, or only planned. Never present estimates as real savings.

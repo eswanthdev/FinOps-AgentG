@@ -5,8 +5,9 @@
 | Control | Where |
 |---|---|
 | No AWS calls, no AWS credentials, no secrets in code or config | whole codebase; `S3ExportSource` raises |
-| Server binds to localhost only; non-local bind refused by the CLI | `__main__.py` |
-| Host header allow-list (DNS-rebinding protection) | `server.py` |
+| Server binds to localhost by default; non-local bind refused unless both proxy settings are set | `__main__.py`, `hosting.py` |
+| Host header allow-list (DNS-rebinding protection); extra names must be exact hostnames, no wildcards | `server.py`, `hosting.py` |
+| `/healthz` is the only path that skips the host check, and it returns no data | `server.py` |
 | POST/DELETE need `application/json` and same-origin `Origin` (blocks cross-site posts) | `server.py` |
 | Request body limit 64 KB; generic error messages, no stack traces to clients | `server.py` |
 | Strict CSP (`default-src 'self'`, no inline script, no eval), nosniff, no-referrer, frame DENY | `server.py` |
@@ -28,6 +29,10 @@
 | Audit retention purge on server start (`COSTLENS_AUDIT_RETENTION_DAYS`, default 90) | `store.purge_audit` |
 
 ## Designed, not implemented
+
+- **Hosted demo**: `deploy/aws/` holds templates for HTTPS, Cognito login, a security group that admits only the load
+  balancer, encrypted disk, IMDSv2 and a narrow server role. Text checks exist; none of it has been deployed. The app
+  trusts the network to enforce that the proxy is the only way in, and does not verify login tokens itself.
 
 - **Verified approvals**: "Approved" in Govern records a decision only. With no login, anyone using the local app can
   record it. Real sign-off needs SSO, roles and separation of duties.
