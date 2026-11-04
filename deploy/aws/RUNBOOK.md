@@ -1,6 +1,6 @@
 # Hosting the synthetic demo on AWS
 
-**Status: deployed once from this runbook.** The live model call is still unproven. **Synthetic data only.** Do not load
+**Status: deployed from this runbook, with the investigator live on Nova Lite.** **Synthetic data only.** Do not load
 real billing data on this setup.
 
 Every step below creates or changes paid AWS resources. Each one needs explicit approval first. Do not put credentials

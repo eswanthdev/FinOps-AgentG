@@ -33,7 +33,7 @@ python -m costlens serve --db ./my.sqlite --port 8765
 
 ## Investigating agent (Amazon Nova Lite on Bedrock)
 
-Tested with fake models. **No live model answer has been seen yet:** Claude calls got a 403, so the agent moved to Nova Lite
+**Live on the hosted demo.** Claude calls got a 403, so the agent runs on Nova Lite
 (`COSTLENS_MODEL_PROVIDER=bedrock-nova`, needs `boto3`, uses the EU inference profile). `bedrock` selects the Claude client.
 With neither set, the app stays in Deterministic mode.
 

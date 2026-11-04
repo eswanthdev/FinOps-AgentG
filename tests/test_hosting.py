@@ -236,4 +236,4 @@ def test_no_secrets_or_real_accounts_in_deploy_files():
 
 def test_runbook_is_honest_about_status():
     text = (ROOT / "deploy" / "aws" / "RUNBOOK.md").read_text(encoding="utf-8")
-    assert "live model call is still unproven" in text and "Synthetic data only" in text and "explicit approval" in text
+    assert "Status: deployed" in text and "Synthetic data only" in text and "explicit approval" in text

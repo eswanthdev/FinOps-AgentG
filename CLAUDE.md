@@ -1,7 +1,7 @@
 # CostLens (working name)
 
 Evidence-backed FinOps agent for AWS. Original product; do not copy any other vendor's code, branding, wording or screens.
-Everything uses synthetic CUR 2.0 fixtures, locally and on the hosted demo. The app reads no real billing data. "Deterministic mode" is the default; the Bedrock investigator is optional and has never run live.
+Everything uses synthetic CUR 2.0 fixtures, locally and on the hosted demo. The app reads no real billing data. "Deterministic mode" is the default; the investigator is optional, and runs live on the hosted demo with Amazon Nova Lite.
 
 ## Run and test
 

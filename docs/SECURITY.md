@@ -55,6 +55,6 @@
 - **Authentication and roles**: SSO (OIDC/SAML), roles per dataset and account. Today: none (local single user).
 - **Model safety, still to do**: provider configurable per tenant, full prompt and response logging with redaction, and a
   company review before real billing data reaches a model. Prompt injection can still mislead the written answer, even
-  though it cannot change state or numbers. The controls above have only been tested with a fake model.
+  though it cannot change state or numbers. The controls above are tested with fake models and have had only a few live runs on Nova Lite.
 - **Remediation**: never in Visualize. Later phases only produce reviewable plans; any change needs explicit
   human approval per action, and automatic remediation is a separately approved future capability.
