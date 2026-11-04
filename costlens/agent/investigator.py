@@ -1,6 +1,7 @@
 """The investigating agent: a model chooses read-only tools across every module.
 
-Off unless COSTLENS_MODEL_PROVIDER=bedrock and the optional package is installed.
+Off unless COSTLENS_MODEL_PROVIDER is bedrock-nova (Amazon Nova, Converse API) or bedrock
+(Claude), and the optional package is installed.
 Rules (each one is enforced in code, not only asked for in the prompt):
   * The model never calculates money. Every amount and percentage in its answer must
     match one a tool returned, or the answer is rejected.
@@ -32,7 +33,10 @@ from .optimize import _Worker
 from .orchestrator import AuditLog, Tool, redact
 
 DEFAULT_MODEL = "anthropic.claude-opus-5-5"
+DEFAULT_NOVA_MODEL = "eu.amazon.nova-lite-v1:0"
 DEFAULT_REGION = "eu-central-1"
+_THINKING_RE = re.compile(r"<thinking>.*?(?:</thinking>|$)", re.S)
+_CONVERSE_STOPS = {"content_filtered": "refusal", "guardrail_intervened": "refusal"}
 MAX_TURNS = 8
 MAX_TOOL_CALLS = 16
 MAX_TOKENS_PER_RUN = 300_000
@@ -120,18 +124,82 @@ class BedrockModelClient:
                          int(usage.get("input_tokens") or 0), int(usage.get("output_tokens") or 0))
 
 
-@functools.lru_cache(maxsize=2)
-def _bedrock_client(region: str, model: str) -> BedrockModelClient:
-    return BedrockModelClient(region, model)
+def to_converse_messages(messages: list[dict]) -> list[dict]:
+    """The loop's message shape to the Bedrock Converse shape."""
+    out = []
+    for m in messages:
+        blocks = m["content"] if isinstance(m["content"], list) else [{"type": "text", "text": m["content"]}]
+        content = []
+        for b in blocks:
+            if b.get("type") == "text":
+                content.append({"text": b["text"]})
+            elif b.get("type") == "tool_use":
+                content.append({"toolUse": {"toolUseId": b["id"], "name": b["name"], "input": b["input"]}})
+            elif b.get("type") == "tool_result":
+                content.append({"toolResult": {"toolUseId": b["tool_use_id"], "content": [{"text": b["content"]}],
+                                               "status": "error" if b.get("is_error") else "success"}})
+        out.append({"role": m["role"], "content": content})
+    return out
+
+
+def from_converse(response: dict) -> ModelTurn:
+    """A Converse response back to the loop's shape. Nova can write its reasoning into the text, so that is removed."""
+    content = []
+    for b in response.get("output", {}).get("message", {}).get("content", []):
+        if "text" in b:
+            text = _THINKING_RE.sub("", b["text"]).strip()
+            if text:
+                content.append({"type": "text", "text": text})
+        elif "toolUse" in b:
+            use = b["toolUse"]
+            content.append({"type": "tool_use", "id": use["toolUseId"], "name": use["name"], "input": use.get("input") or {}})
+    stop = response.get("stopReason") or ""
+    usage = response.get("usage") or {}
+    return ModelTurn(_CONVERSE_STOPS.get(stop, stop), content, int(usage.get("inputTokens") or 0), int(usage.get("outputTokens") or 0))
+
+
+class NovaModelClient:
+    """Amazon Nova on Bedrock through the Converse API. Credentials come from the AWS chain, never from code."""
+
+    def __init__(self, region: str, model: str):
+        try:
+            import boto3
+        except ImportError as exc:
+            raise ModelUnavailable("the optional boto3 package is not installed") from exc
+        self.model = model
+        self.client = None
+        self.setup_error = ""
+        try:
+            self.client = boto3.client("bedrock-runtime", region_name=region)
+        except Exception as exc:  # noqa: BLE001 - each question then falls back and says why
+            self.setup_error = type(exc).__name__
+
+    def create(self, system: str, messages: list[dict], tools: list[dict]) -> ModelTurn:
+        if self.client is None:
+            raise ModelUnavailable(self.setup_error)
+        specs = [{"toolSpec": {"name": t["name"], "description": t["description"], "inputSchema": {"json": t["input_schema"]}}} for t in tools]
+        try:
+            response = self.client.converse(modelId=self.model, system=[{"text": system}], messages=to_converse_messages(messages),
+                                            toolConfig={"tools": specs}, inferenceConfig={"maxTokens": 4096, "temperature": 0})
+        except Exception as exc:  # noqa: BLE001 - API errors and SDK errors must all fall back
+            raise ModelUnavailable(type(exc).__name__) from exc
+        return from_converse(response)
+
+
+@functools.lru_cache(maxsize=4)
+def _cached_client(provider: str, region: str, model: str) -> ModelClient:
+    return (NovaModelClient if provider == "bedrock-nova" else BedrockModelClient)(region, model)
 
 
 def make_client() -> ModelClient | None:
     """The configured client, or None for Deterministic mode."""
-    if os.environ.get("COSTLENS_MODEL_PROVIDER", "").strip().lower() != "bedrock":
+    provider = os.environ.get("COSTLENS_MODEL_PROVIDER", "").strip().lower()
+    if provider not in ("bedrock", "bedrock-nova"):
         return None
+    default = DEFAULT_NOVA_MODEL if provider == "bedrock-nova" else DEFAULT_MODEL
     try:
-        return _bedrock_client(os.environ.get("COSTLENS_BEDROCK_REGION", DEFAULT_REGION).strip(),
-                               os.environ.get("COSTLENS_BEDROCK_MODEL", DEFAULT_MODEL).strip())
+        return _cached_client(provider, os.environ.get("COSTLENS_BEDROCK_REGION", DEFAULT_REGION).strip(),
+                              os.environ.get("COSTLENS_BEDROCK_MODEL", default).strip())
     except ModelUnavailable:
         return None
 

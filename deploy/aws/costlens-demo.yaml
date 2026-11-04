@@ -26,14 +26,6 @@ Parameters:
   BudgetEmail:
     Type: String
     Description: Who gets the monthly cost alert
-  BedrockModelId:
-    Type: String
-    Default: anthropic.claude-opus-5-5
-    Description: Model the investigator uses
-  BedrockModelArn:
-    Type: String
-    Description: ARN of that model, from the Bedrock console. The server role can call this model only.
-    AllowedPattern: "^arn:aws:bedrock.*"
   MonthlyBudgetUsd:
     Type: Number
     Default: 60
@@ -138,9 +130,11 @@ Resources:
               - Effect: Allow
                 Action: [ecr:BatchCheckLayerAvailability, ecr:BatchGetImage, ecr:GetDownloadUrlForLayer]
                 Resource: !Ref RepositoryArn
-              - Effect: Allow
-                Action: bedrock-mantle:CreateInference
-                Resource: !Ref BedrockModelArn
+              - Effect: Allow  # Nova Lite only, through its EU inference profile
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/eu.amazon.nova-lite-v1:0"
+                  - arn:aws:bedrock:*::foundation-model/amazon.nova-lite-v1:0
               - Effect: Allow
                 Action: [logs:CreateLogStream, logs:PutLogEvents]
                 Resource: !Sub "${LogGroup.Arn}:*"
@@ -194,7 +188,7 @@ Resources:
           aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin "$registry"
           docker run -d --name costlens --restart unless-stopped -p 8765:8765 -v /data:/data \
             -e COSTLENS_BEHIND_AUTH_PROXY=true -e COSTLENS_ALLOWED_HOSTS=${DomainName} -e COSTLENS_LOG_LEVEL=INFO \
-            -e COSTLENS_MODEL_PROVIDER=bedrock -e COSTLENS_BEDROCK_REGION=${AWS::Region} -e COSTLENS_BEDROCK_MODEL=${BedrockModelId} \
+            -e COSTLENS_MODEL_PROVIDER=bedrock-nova -e COSTLENS_BEDROCK_REGION=${AWS::Region} \
             --log-driver awslogs --log-opt awslogs-region=${AWS::Region} --log-opt awslogs-group=${LogGroup} \
             '${ImageUri}'
 
@@ -235,6 +229,7 @@ Resources:
       Subnets: [!Ref SubnetA, !Ref SubnetB]
       LoadBalancerAttributes:
         - { Key: routing.http.drop_invalid_header_fields.enabled, Value: "true" }
+        - { Key: idle_timeout.timeout_seconds, Value: "180" }  # above the investigator's 150-second limit
   TargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
     Properties:

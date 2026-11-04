@@ -199,9 +199,17 @@ def test_server_role_has_no_broad_or_billing_access():
 
 def test_server_can_call_only_the_chosen_model():
     role = block("ServerRole")
-    assert "Action: bedrock-mantle:CreateInference\n                Resource: !Ref BedrockModelArn" in role
+    assert "Action: bedrock:InvokeModel" in role and "inference-profile/eu.amazon.nova-lite-v1:0" in role
+    assert "foundation-model/amazon.nova-lite-v1:0" in role and "foundation-model/*" not in role
+    assert "bedrock:*" not in role.replace("arn:aws:bedrock:*", "")
     assert "HttpPutResponseHopLimit: 2" in TEMPLATE
-    assert "COSTLENS_MODEL_PROVIDER=bedrock" in TEMPLATE
+    assert "COSTLENS_MODEL_PROVIDER=bedrock-nova" in TEMPLATE
+
+
+def test_load_balancer_waits_longer_than_the_investigator():
+    from costlens.agent.investigator import MAX_SECONDS
+    seconds = int(re.search(r'idle_timeout.timeout_seconds, Value: "(\d+)"', TEMPLATE).group(1))
+    assert seconds > MAX_SECONDS
 
 
 def test_snapshot_description_has_no_characters_aws_refuses():

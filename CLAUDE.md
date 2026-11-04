@@ -11,7 +11,7 @@ Needs Python 3.11+. Standard library only at runtime.
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens demo --scenario savings --reset-db   # separate demo with billing after recorded changes
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 482 passed
+python -m pytest -q                              # expected: 493 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 

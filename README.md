@@ -31,10 +31,11 @@ python -m costlens status --db ./my.sqlite
 python -m costlens serve --db ./my.sqlite --port 8765
 ```
 
-## Investigating agent (Claude on Amazon Bedrock)
+## Investigating agent (Amazon Nova Lite on Bedrock)
 
-Written and tested with a fake model. **It has never called Bedrock.** It stays off unless `COSTLENS_MODEL_PROVIDER=bedrock`
-is set and the optional package is installed (`pip install "costlens[bedrock]"`). Off means Deterministic mode, as before.
+Tested with fake models. **No live model answer has been seen yet:** Claude calls got a 403, so the agent moved to Nova Lite
+(`COSTLENS_MODEL_PROVIDER=bedrock-nova`, needs `boto3`, uses the EU inference profile). `bedrock` selects the Claude client.
+With neither set, the app stays in Deterministic mode.
 
 When on, a model chooses from eight read-only tools across Visualize, Anomalies, Budgets, Optimize, Govern and realised
 savings, follows the evidence, and writes the answer. Each answer shows what the agent did and links to the evidence.
@@ -44,7 +45,7 @@ savings, follows the evidence, and writes the answer. Each answer shows what the
 - **Read-only:** no tool can change a status, approve, record a change or touch AWS. Budget creation keeps its preview flow.
 - **Limits:** 8 model turns, 16 tool calls, 300,000 tokens and 150 seconds per question.
 - **Fallback:** on any failure the app answers from fixed rules and says so.
-- **Settings:** `COSTLENS_BEDROCK_REGION` (default `eu-central-1`), `COSTLENS_BEDROCK_MODEL` (default `anthropic.claude-opus-5-5`).
+- **Settings:** `COSTLENS_BEDROCK_REGION` (default `eu-central-1`), `COSTLENS_BEDROCK_MODEL` (default `eu.amazon.nova-lite-v1:0` for Nova).
 - **Evaluation:** `python -m costlens eval-agent --db <demo db>` runs 20 questions. It calls a paid model.
 
 Synthetic data only for now. The numbers are checked; the model's reasoning and conclusions are not, so a person should
@@ -202,7 +203,7 @@ are flagged. On the demo data it finds exactly the two planted cases.
 ## Tests
 
 ```bash
-python -m pytest -q                      # 482 tests: unit, integration (HTTP), browser UI
+python -m pytest -q                      # 493 tests: unit, integration (HTTP), browser UI
 python -m pytest -q --ignore=tests/test_ui.py   # without a browser
 ```
 

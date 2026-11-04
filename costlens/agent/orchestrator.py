@@ -57,8 +57,8 @@ def redact(text: str) -> str:
 
 def model_mode() -> dict:
     provider = os.environ.get("COSTLENS_MODEL_PROVIDER", "").strip().lower()
-    if provider == "bedrock":
-        if importlib.util.find_spec("anthropic"):
+    if provider in ("bedrock", "bedrock-nova"):
+        if importlib.util.find_spec("boto3" if provider == "bedrock-nova" else "anthropic"):
             return {"mode": "model", "label": "AI-assisted mode",
                     "detail": "A model chooses read-only tools and writes the answer. Every number comes from code. "
                               "If the model fails, answers fall back to fixed rules."}

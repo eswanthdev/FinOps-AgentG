@@ -36,12 +36,11 @@ docker push <repository-uri>:<tag>
 ## 4. Main stack
 
 ```bash
-aws cloudformation deploy --region eu-central-1 --stack-name costlens-demo --template-file deploy/aws/costlens-demo.yaml --capabilities CAPABILITY_IAM --parameter-overrides DomainName=<domain> CertificateArn=<arn> ImageUri=<repository-uri>:<tag> RepositoryArn=<arn> CognitoDomainPrefix=<prefix> BudgetEmail=<email> BedrockModelArn=<model-arn>
+aws cloudformation deploy --region eu-central-1 --stack-name costlens-demo --template-file deploy/aws/costlens-demo.yaml --capabilities CAPABILITY_IAM --parameter-overrides DomainName=<domain> CertificateArn=<arn> ImageUri=<repository-uri>:<tag> RepositoryArn=<arn> CognitoDomainPrefix=<prefix> BudgetEmail=<email>
 ```
 
-Before this step, enable the model in the Bedrock console in `eu-central-1` and copy its ARN. Model calls are paid per use.
-The docs list the Frankfurt global endpoint and an EU inference profile. Confirm which one the default model ID uses, and
-that the `bedrock-mantle:CreateInference` permission works with that ARN.
+The investigator uses Amazon Nova Lite through the `eu.amazon.nova-lite-v1:0` inference profile, so requests stay on EU
+regions. Model calls are paid per use. The Claude client exists but got a 403 here and is not used.
 
 Point the domain at the `LoadBalancerDns` output with a CNAME record.
 

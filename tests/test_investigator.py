@@ -131,8 +131,11 @@ def test_every_tool_schema_is_strict():
 
 def test_investigator_module_has_no_write_or_network_code():
     text = (ROOT / "costlens" / "agent" / "investigator.py").read_text(encoding="utf-8")
-    for word in ("set_status(", "mark_implemented", "set_guardrail_status", "add_exception", "INSERT ", "UPDATE ", "DELETE ", "boto3", "urllib", "socket"):
+    for word in ("set_status(", "mark_implemented", "set_guardrail_status", "add_exception", "INSERT ", "UPDATE ", "DELETE ", "urllib", "socket"):
         assert word not in text, word
+    # The only AWS access is one model call: a bedrock-runtime client, used only for converse.
+    assert re.findall(r"boto3\.\w+\([^,)]*", text) == ['boto3.client("bedrock-runtime"']
+    assert re.findall(r"self\.client\.(?!with_options)(\w+)\(", text) == ["converse"]
 
 
 # ------------------------------------------------------------------ the money check
@@ -289,6 +292,103 @@ def test_sdk_error_during_a_call_gives_a_fixed_rules_answer(demo_conn, monkeypat
     monkeypatch.setattr(investigator, "make_client", lambda: client)
     r = Orchestrator(demo_conn).ask("How can I reduce EC2 cost?")
     assert r["kind"] == "optimize" and "RuntimeError" in r["model_note"] and "credentials" not in r["model_note"]
+
+
+class FakeConverse:
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.requests = []
+
+    def converse(self, **kwargs):
+        self.requests.append(json.loads(json.dumps(kwargs)))
+        r = self.responses.pop(0)
+        if isinstance(r, Exception):
+            raise r
+        return r
+
+
+def nova(converse):
+    fake = types.ModuleType("boto3")
+    fake.client = lambda *_, **__: converse
+    sys.modules["boto3"] = fake
+    try:
+        return investigator.NovaModelClient("eu-central-1", "eu.amazon.nova-lite-v1:0")
+    finally:
+        del sys.modules["boto3"]
+
+
+def converse_tool(name, input=None, id="t1", text=None):
+    content = ([{"text": text}] if text else []) + [{"toolUse": {"toolUseId": id, "name": name, "input": input or {}}}]
+    return {"output": {"message": {"role": "assistant", "content": content}}, "stopReason": "tool_use", "usage": {"inputTokens": 5, "outputTokens": 2}}
+
+
+def converse_text(text, stop="end_turn"):
+    return {"output": {"message": {"role": "assistant", "content": [{"text": text}]}}, "stopReason": stop, "usage": {"inputTokens": 5, "outputTokens": 2}}
+
+
+def test_nova_runs_the_full_loop_with_checked_numbers(demo_conn):
+    c = FakeConverse(converse_tool("optimization_findings", {"account": ""}), converse_text("Estimated savings are $3,272.06 a month."))
+    r = investigate(demo_conn, nova(c), "How much can we save?")
+    assert r["status"] == "ok" and "$3,272.06" in r["answer"] and r["tokens"] == 14
+    second = c.requests[1]
+    assert second["modelId"] == "eu.amazon.nova-lite-v1:0" and second["system"][0]["text"] == investigator.SYSTEM_PROMPT
+    assert second["messages"][1]["content"][0]["toolUse"]["name"] == "optimization_findings"
+    assert second["messages"][2]["content"][0]["toolResult"]["status"] == "success"
+
+
+def test_nova_invented_number_is_still_rejected(demo_conn):
+    r = investigate(demo_conn, nova(FakeConverse(converse_tool("optimization_findings", {"account": ""}), converse_text("$9.99"), converse_text("$8.88"))), "x")
+    assert r["status"] == "failed" and "rejected" in r["note"]
+
+
+def test_nova_tool_outside_the_list_is_refused_and_marked_as_error(demo_conn):
+    c = FakeConverse(converse_tool("set_status", {"id": "x"}), converse_text("I cannot do that."))
+    r = investigate(demo_conn, nova(c), "x")
+    assert r["trace"][0]["status"] == "error"
+    assert c.requests[1]["messages"][2]["content"][0]["toolResult"]["status"] == "error"
+
+
+def test_nova_reasoning_tags_never_reach_the_answer(demo_conn):
+    c = FakeConverse(converse_text("<thinking>maybe $1.11 is right</thinking>Nothing to report."))
+    r = investigate(demo_conn, nova(c), "x")
+    assert r["status"] == "ok" and r["answer"] == "Nothing to report."
+
+
+def test_nova_unclosed_reasoning_tag_is_removed():
+    assert investigator.from_converse(converse_text("<thinking>cut off")).content == []
+
+
+def test_nova_tool_specs_drop_claude_only_fields():
+    c = FakeConverse(converse_text("Done."))
+    nova(c).create("s", [{"role": "user", "content": "q"}], TOOLS)
+    spec = c.requests[0]["toolConfig"]["tools"][0]["toolSpec"]
+    assert set(spec) == {"name", "description", "inputSchema"} and c.requests[0]["inferenceConfig"]["temperature"] == 0
+
+
+@pytest.mark.parametrize("stop", ["content_filtered", "guardrail_intervened"])
+def test_nova_filtering_counts_as_a_refusal(demo_conn, stop):
+    r = investigate(demo_conn, nova(FakeConverse(converse_text("x", stop))), "x")
+    assert r["status"] == "failed" and "declined" in r["note"]
+
+
+def test_nova_errors_fall_back(demo_conn, monkeypatch):
+    client = nova(FakeConverse(RuntimeError("AccessDeniedException")))
+    monkeypatch.setattr(investigator, "make_client", lambda: client)
+    r = Orchestrator(demo_conn).ask("How can I reduce EC2 cost?")
+    assert r["kind"] == "optimize" and "RuntimeError" in r["model_note"]
+
+
+def test_nova_provider_defaults_to_the_eu_profile(monkeypatch):
+    monkeypatch.setenv("COSTLENS_MODEL_PROVIDER", "bedrock-nova")
+    monkeypatch.delenv("COSTLENS_BEDROCK_MODEL", raising=False)
+    seen = {}
+
+    def build(provider, region, model):
+        seen.update(provider=provider, region=region, model=model)
+        return "client"
+    monkeypatch.setattr(investigator, "_cached_client", build)
+    assert investigator.make_client() == "client"
+    assert seen == {"provider": "bedrock-nova", "region": "eu-central-1", "model": "eu.amazon.nova-lite-v1:0"}
 
 
 def test_chat_uses_the_investigator_when_a_model_is_set(demo_conn, monkeypatch):
