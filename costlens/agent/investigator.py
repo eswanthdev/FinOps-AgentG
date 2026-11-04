@@ -97,16 +97,22 @@ class BedrockModelClient:
         except ImportError as exc:
             raise ModelUnavailable("the optional anthropic[bedrock] package is not installed") from exc
         self.model = model
-        self.client = AnthropicBedrockMantle(aws_region=region)
+        self.client = None
+        self.setup_error = ""
+        try:
+            self.client = AnthropicBedrockMantle(aws_region=region)
+        except Exception as exc:  # noqa: BLE001 - e.g. no AWS credentials; each question then falls back and says why
+            self.setup_error = type(exc).__name__
 
     def create(self, system: str, messages: list[dict], tools: list[dict]) -> ModelTurn:
-        import anthropic
+        if self.client is None:
+            raise ModelUnavailable(self.setup_error)
         try:
             r = self.client.with_options(timeout=60.0).messages.create(
                 model=self.model, max_tokens=16000, tools=tools, messages=messages,
                 system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
                 output_config={"effort": "medium"})
-        except anthropic.APIError as exc:
+        except Exception as exc:  # noqa: BLE001 - API errors and SDK errors such as missing credentials must all fall back
             raise ModelUnavailable(type(exc).__name__) from exc
         data = r.to_dict()
         usage = data.get("usage") or {}

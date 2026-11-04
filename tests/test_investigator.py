@@ -1,6 +1,8 @@
 """The investigating agent, tested with a scripted fake model. No test calls Bedrock."""
 import json
 import re
+import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -258,6 +260,35 @@ def test_bedrock_without_the_package_stays_deterministic(demo_conn, monkeypatch)
     monkeypatch.setenv("COSTLENS_MODEL_PROVIDER", "bedrock")
     monkeypatch.setattr("importlib.util.find_spec", lambda *_: None)
     assert model_mode()["mode"] == "deterministic" and "not installed" in model_mode()["detail"]
+
+
+def fake_sdk(monkeypatch, client):
+    module = types.ModuleType("anthropic")
+    module.AnthropicBedrockMantle = client
+    monkeypatch.setitem(sys.modules, "anthropic", module)
+
+
+def test_sdk_error_at_setup_becomes_a_fallback(demo_conn, monkeypatch):
+    def no_credentials(**_):
+        raise RuntimeError("Could not resolve AWS credentials from session")
+    fake_sdk(monkeypatch, no_credentials)
+    client = investigator.BedrockModelClient("eu-central-1", "m")
+    with pytest.raises(ModelUnavailable, match="RuntimeError"):
+        client.create("s", [], [])
+
+
+def test_sdk_error_during_a_call_gives_a_fixed_rules_answer(demo_conn, monkeypatch):
+    class Broken:
+        def __init__(self, **_):
+            pass
+
+        def with_options(self, **_):
+            raise RuntimeError("Could not resolve AWS credentials from session")
+    fake_sdk(monkeypatch, Broken)
+    client = investigator.BedrockModelClient("eu-central-1", "m")
+    monkeypatch.setattr(investigator, "make_client", lambda: client)
+    r = Orchestrator(demo_conn).ask("How can I reduce EC2 cost?")
+    assert r["kind"] == "optimize" and "RuntimeError" in r["model_note"] and "credentials" not in r["model_note"]
 
 
 def test_chat_uses_the_investigator_when_a_model_is_set(demo_conn, monkeypatch):

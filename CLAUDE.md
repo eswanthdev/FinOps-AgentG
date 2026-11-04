@@ -11,7 +11,7 @@ Needs Python 3.11+. Standard library only at runtime.
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens demo --scenario savings --reset-db   # separate demo with billing after recorded changes
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 479 passed
+python -m pytest -q                              # expected: 481 passed
 python -m pytest -q --ignore=tests/test_ui.py    # without a browser
 ```
 
@@ -59,7 +59,7 @@ Sidebar order: Visualize, Optimize, Govern, Anomalies, Budgets & forecasting.
 
 - Do not create or change AWS resources, IAM roles, billing exports or paid services. No AWS API call without separate, explicit user approval.
 - Never ask the user to paste credentials, secrets or tokens into chat or code. SMTP and AWS settings come only from environment variables.
-- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/investigator-agent`, on top of `feature/hosting-prep`). There is no remote yet. AWS region: `eu-central-1`.
+- Do not push, open or merge a PR, deploy, or touch `main` without asking. Commit locally on a feature branch (current: `feature/investigator-agent`, on top of `feature/hosting-prep`). Remote: public repo `eswanthdev/FinOps-AgentG`. AWS region: `eu-central-1`.
 - Do not delete or overwrite existing work. Ask before any destructive action.
 - Do not install new third-party packages without asking.
 - Be honest about what is implemented, tested, simulated, or only planned. Never present estimates as real savings.
