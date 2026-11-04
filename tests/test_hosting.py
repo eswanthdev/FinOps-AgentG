@@ -204,6 +204,11 @@ def test_server_can_call_only_the_chosen_model():
     assert "COSTLENS_MODEL_PROVIDER=bedrock" in TEMPLATE
 
 
+def test_snapshot_description_has_no_characters_aws_refuses():
+    text = re.search(r"Description: (.*?)(?:  #.*)?$", block("DailySnapshots"), re.M).group(1)
+    assert re.fullmatch(r"[0-9A-Za-z _-]+", text)
+
+
 def test_runbook_uses_frankfurt():
     text = (ROOT / "deploy" / "aws" / "RUNBOOK.md").read_text(encoding="utf-8")
     assert "eu-central-1" in text and "ap-south-1" not in text

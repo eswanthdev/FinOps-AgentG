@@ -290,7 +290,7 @@ Resources:
   DailySnapshots:
     Type: AWS::DLM::LifecyclePolicy
     Properties:
-      Description: Daily snapshot of the CostLens demo server, kept for 7 days
+      Description: Daily snapshot of the CostLens demo server kept for 7 days  # AWS allows only letters, digits, spaces, _ and -
       State: ENABLED
       ExecutionRoleArn: !GetAtt SnapshotRole.Arn
       PolicyDetails:
