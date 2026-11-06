@@ -310,6 +310,9 @@ details.calc summary::-webkit-details-marker { display: none; }
 
 /* Optimize */
 .opt-tabs { flex-wrap: wrap; }
+.opt-service-picker h3 { margin: 0 0 10px; font-size: 15px; }
+.opt-service-tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px; }
+.opt-service-tabs button { padding: 9px 16px; border-radius: 7px; }
 .opt-table .opt-title { font-weight: 600; overflow-wrap: anywhere; }
 .opt-table .muted { font-size: 12px; }
 .opt-detail { padding: 6px 4px 2px; white-space: normal; }
@@ -377,6 +380,7 @@ details.calc summary::-webkit-details-marker { display: none; }
 .st-provisional, .st-partly_realised { background: var(--warn-bg); color: var(--warn-ink); border-color: transparent; }
 .st-not_realised { background: var(--err-bg); color: var(--err-ink); border-color: transparent; }
 .st-waiting, .st-cannot_verify { background: var(--surface-2); color: var(--ink-2); }
+.nav-item:disabled { opacity: .45; cursor: not-allowed; }
 @media (max-width: 640px) {
   .gov-form, .opt-mark-form { grid-template-columns: 1fr; }
 }

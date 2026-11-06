@@ -1,10 +1,13 @@
 # Security: implemented vs designed
 
+Current cloud extension: see [cloud UI](CLOUD_UI.md) and [scoped tools/runtime](SCOPED_ATHENA_AGENTCORE.md).
+The local deterministic engine and hosted synthetic pilot have different access boundaries.
+
 ## Implemented and tested in this release
 
 | Control | Where |
 |---|---|
-| No AWS calls, no AWS credentials, no secrets in code or config | whole codebase; `S3ExportSource` raises |
+| Local deterministic billing/optimization engines make no AWS calls; cloud access uses AWS roles and fixed registered scopes | `query/engine.py`, `query/athena.py`, `cloud_app.py`; no credentials embedded in source |
 | Server binds to localhost by default; non-local bind refused unless both proxy settings are set | `__main__.py`, `hosting.py` |
 | Host header allow-list (DNS-rebinding protection); extra names must be exact hostnames, no wildcards | `server.py`, `hosting.py` |
 | `/healthz` is the only path that skips the host check, and it returns no data | `server.py` |
@@ -37,9 +40,9 @@
 
 ## Designed, not implemented
 
-- **Hosted demo**: `deploy/aws/` holds templates for HTTPS, Cognito login, a security group that admits only the load
-  balancer, encrypted disk, IMDSv2 and a narrow server role. Text checks exist; none of it has been deployed. The app
-  trusts the network to enforce that the proxy is the only way in, and does not verify login tokens itself.
+- **Production hardening beyond the hosted demo**: HTTPS, Cognito login, load-balancer-only inbound access,
+  encrypted disk and IMDSv2 are deployed for the synthetic pilot. The app still trusts the proxy/network boundary
+  rather than verifying login token signatures itself. Production per-user resource authorization remains unfinished.
 
 - **Verified identity**: the app trusts the load balancer identity header without checking its signature, so the network
   rule that only the load balancer reaches the server is essential. "Approved" in Govern records a decision only, and anyone

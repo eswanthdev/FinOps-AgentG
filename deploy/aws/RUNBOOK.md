@@ -1,5 +1,10 @@
 # Hosting the synthetic demo on AWS
 
+For the active cloud-connected UI, use [Cloud UI release/rollback](../../docs/CLOUD_UI.md) and the
+[documentation index](../../docs/README.md). The commands below describe the original hosting bootstrap.
+The current UI uses `Dockerfile.cloud` and `release_cloud_ui.py`; changing only this stack's ImageUri does not
+replace the running container. Release/rollback IDs are retained in local `var/` records and on the server.
+
 **Status: deployed from this runbook, with the investigator live on Nova Lite.** **Synthetic data only.** Do not load
 real billing data on this setup.
 

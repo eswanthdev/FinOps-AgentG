@@ -205,7 +205,8 @@ def get_report(conn, user_id: str, report_id: int) -> dict | None:
     current = []
     for e in json.loads(row["evidence_json"]):
         try:
-            result = engine.run(conn, CostQuery.from_dict(e["query"]))
+            from .. import cloud_app
+            result = cloud_app.query(e["query"]) if cloud_app.enabled() else engine.run(conn, CostQuery.from_dict(e["query"]))
             current.append({"title": e["title"], "query": e["query"], "status": result.get("status"),
                             "summary": result.get("summary") or result.get("reason", "")})
         except QueryError as exc:

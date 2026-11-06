@@ -1,5 +1,11 @@
 # Data contracts
 
+For the proposed real AWS integration, see [AWS evidence platform](AWS_DATA_PLATFORM.md).
+The fixture contracts below remain implemented synthetic contracts; they are not native AWS export schemas.
+
+The cloud pilot's additional contracts are documented in [scoped Athena tools](SCOPED_ATHENA_AGENTCORE.md)
+and the [common resource/opportunity model](COMMON_DATABASE.md). They remain synthetic pilot contracts.
+
 ## 1. Delivery folder (local source)
 
 ```

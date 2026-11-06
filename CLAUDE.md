@@ -3,6 +3,10 @@
 Evidence-backed FinOps agent for AWS. Original product; do not copy any other vendor's code, branding, wording or screens.
 Everything uses synthetic CUR 2.0 fixtures, locally and on the hosted demo. The app reads no real billing data. "Deterministic mode" is the default; the investigator is optional, and runs live on the hosted demo with Amazon Nova Lite.
 
+Current hosted state: cloud mode routes chat to AgentCore and dashboards to scoped Athena through authenticated MCP.
+Optimize has a validated S3-snapshot report and service tabs; cloud planning/implementation writes are disabled.
+Start with `docs/README.md` and `docs/CLOUD_UI.md`. Local mode remains available by default.
+
 ## Run and test
 
 Needs Python 3.11+. Standard library only at runtime.
@@ -11,8 +15,8 @@ Needs Python 3.11+. Standard library only at runtime.
 python -m costlens demo --reset-db   # fixtures -> ./var, ingest, serve http://127.0.0.1:8765
 python -m costlens demo --scenario savings --reset-db   # separate demo with billing after recorded changes
 python -m costlens status --db ./var/<db>.sqlite
-python -m pytest -q                              # expected: 537 passed
-python -m pytest -q --ignore=tests/test_ui.py    # without a browser
+python -m pytest -q                              # results depend on installed optional tooling
+python -m pytest -q --ignore=tests/test_ui.py --ignore=tests/test_cloud_ui.py    # without a browser
 ```
 
 UI tests need Playwright and Chrome/Chromium (`COSTLENS_CHROME=/path/to/chrome`); they skip otherwise.

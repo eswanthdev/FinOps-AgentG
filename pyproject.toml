@@ -9,6 +9,8 @@ dependencies = []
 dev = ["pytest>=8", "playwright>=1.40"]
 bedrock = ["anthropic[bedrock]"]
 bedrock-nova = ["boto3"]
+parquet = ["pyarrow>=18"]
+cloud = ["boto3>=1.43"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

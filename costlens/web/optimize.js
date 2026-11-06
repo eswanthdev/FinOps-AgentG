@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const U = () => window.CostLensUI;
-  const local = { tab: "all", open: new Set() };
+  const local = { tab: "all", service: "all", open: new Set() };
   const TABS = [["all", "All"], ["plan_ready", "Plan ready"], ["conditional", "Conditional"], ["proposal", "Proposal only"],
                 ["alternative", "Alternative"], ["needs_evidence", "Needs evidence"], ["dismissed", "Dismissed"], ["realised", "Realised"]];
   const MARKABLE = ["plan_ready", "conditional", "alternative"];
@@ -17,7 +17,8 @@
   async function refreshCount() {
     try {
       const s = await U().api("/api/optimize");
-      document.getElementById("optimizeCount").textContent = s.totals.counted_count ? String(s.totals.counted_count) : "";
+      const count = s.totals.counted_count;
+      document.getElementById("optimizeCount").textContent = count ? String(count) : "";
     } catch (e) { /* ignore */ }
   }
 
@@ -99,12 +100,13 @@
 
   function detail(f) {
     const buttons = [];
+    const readOnly=U().state.status && U().state.status.backend==="cloud";
     if (f.evidence_query) buttons.push(el("button", { class: "btn", type: "button", text: "Open evidence in Visualize",
       onclick: () => U().openQuery(f.evidence_query, `Evidence: ${f.title}, ${U().fmtDate(f.time_range.start)} – ${U().fmtDate(f.time_range.end)}`) }));
     const done = f.status === "implemented";
-    if (!done && f.status !== "accepted" && f.action_plan) buttons.push(el("button", { class: "btn", type: "button", text: "Accept for planning", onclick: setStatus(f, "accepted") }));
-    if (!done && f.status !== "dismissed") buttons.push(el("button", { class: "btn", type: "button", text: "Dismiss", onclick: setStatus(f, "dismissed") }));
-    if (!done && f.status !== "open") buttons.push(el("button", { class: "btn", type: "button", text: "Reopen", onclick: setStatus(f, "open") }));
+    if (!readOnly && !done && f.status !== "accepted" && f.action_plan) buttons.push(el("button", { class: "btn", type: "button", text: "Accept for planning", onclick: setStatus(f, "accepted") }));
+    if (!readOnly && !done && f.status !== "dismissed") buttons.push(el("button", { class: "btn", type: "button", text: "Dismiss", onclick: setStatus(f, "dismissed") }));
+    if (!readOnly && !done && f.status !== "open") buttons.push(el("button", { class: "btn", type: "button", text: "Reopen", onclick: setStatus(f, "open") }));
     return el("div", { class: "opt-detail", "data-detail": f.id },
       el("p", { class: "muted", text: `${f.change} · ${f.account} · ${f.region} · source: ${f.source} · effort: ${effortText(f.effort)}` }),
       f.overlaps.length && f.phase === "alternative" ? el("div", { class: "notice neutral", text: "This competes with another recommendation on the same resource. Only one can be done, so this one is not counted." }) : null,
@@ -116,7 +118,7 @@
       f.limitations.length ? section("Limitations", list(f.limitations)) : null,
       f.action_plan ? planBlock(f.action_plan) : section("Next step", el("p", { text: f.next_step })),
       el("p", { class: "muted", text: `Realised saving: ${f.realised.display}. ${f.realised.detail}` }),
-      !done && f.status !== "dismissed" && MARKABLE.includes(f.phase) ? markForm(f) : null,
+      !readOnly && !done && f.status !== "dismissed" && MARKABLE.includes(f.phase) ? markForm(f) : null,
       el("div", { class: "card-foot" }, buttons));
   }
 
@@ -179,7 +181,7 @@
     page.textContent = "";
     page.appendChild(el("div", { class: "thinking" }, el("span", { class: "dots" }, el("span"), el("span"), el("span")), "Checking the evidence…"));
     let s;
-    try { s = await U().api("/api/optimize"); }
+    try { s = await U().api("/api/optimize?service="+encodeURIComponent(local.service)); }
     catch (e) { page.textContent = ""; page.appendChild(el("div", { class: "notice error", text: e.message })); return; }
     page.textContent = "";
     page.appendChild(el("div", { class: "page-head" }, el("h2", { text: "Optimize" }),
@@ -189,18 +191,24 @@
       return;
     }
     const t = s.totals;
+    const services=el("div",{class:"opt-service-picker"},el("h3",{text:"Choose a service"}),
+      el("div",{class:"tabs opt-service-tabs",role:"tablist","aria-label":"Services"},(s.available_services||[]).map(service=>
+        el("button",{type:"button",role:"tab",class:local.service===service.key?"on":"","aria-selected":String(local.service===service.key),
+          text:`${service.label} (${service.count})`,onclick:()=>{local.service=service.key;local.tab="all";local.open.clear();render();}}))));
+    if (s.source_snapshot_as_of) page.appendChild(el("div",{class:"notice neutral",text:`Synthetic S3 snapshot as of ${U().fmtTs(s.source_snapshot_as_of)}. Estimates are validated by the optimization pipeline; no AWS changes are made.`}));
     const inTab = f => local.tab === "all" ? f.status !== "dismissed" : local.tab === "dismissed" ? f.status === "dismissed" : f.phase === local.tab && f.status !== "dismissed";
     const counts = Object.fromEntries(TABS.map(([k]) => { const was = local.tab; local.tab = k; const n = s.opportunities.filter(inTab).length; local.tab = was; return [k, n]; }));
     const changes = s.verification.results;
     counts.realised = changes.length;
     const items = local.tab === "realised" ? [] : s.opportunities.filter(inTab);
-    const tabs = el("div", { class: "tabs opt-tabs", role: "tablist" }, TABS.map(([k, label]) =>
+    const tabs = el("div", { class: "tabs opt-tabs", role: "tablist", "aria-label":"Recommendation phases" }, TABS.map(([k, label]) =>
       el("button", { type: "button", class: local.tab === k ? "on" : "", role: "tab", "aria-selected": String(local.tab === k),
                      text: `${label} (${counts[k]})`, onclick: () => { local.tab = k; render(); } })));
     page.appendChild(el("div", { class: "stack" },
+      services,
       chatBox(),
       el("div", { class: "card opt-totals" },
-        el("div", { class: "card-head" }, el("div", {}, el("div", { class: "card-title", text: "Monthly savings estimate" }),
+        el("div", { class: "card-head" }, el("div", {}, el("div", { class: "card-title", text: "Monthly savings estimate"+(local.service!=="all"?" · "+s.service_label:"") }),
           el("div", { class: "card-range", text: `Evidence window ${U().fmtDate(s.window.start)} – ${U().fmtDate(s.window.end)} · snapshot ${s.snapshot.execution_id}` }))),
         totalsKpis(t),
         el("div", { class: "notice neutral", text: `The sources add up to ${t.raw_display}. That is not a savings number: it includes ${t.alternative_display} of competing alternatives, ${t.unverified_display} without enough evidence, the conditional amount, and the unadjusted commitment.` })),
@@ -208,10 +216,10 @@
       el("div", { class: "summary-row" }, tabs),
       local.tab === "realised" ? [
         el("div", { class: "notice neutral", text: "Realised amounts are measured from CUR and are never added to estimates. In the demo, every result is a planted synthetic story, not proof of real savings." }),
-        changes.length ? changes.map(realisedCard) : el("div", { class: "empty-pins" }, el("p", { text: "No change has been recorded yet." }), el("p", { class: "muted", text: "Open a finding and record it after a person has made the change." })),
+        changes.length ? changes.map(realisedCard) : el("div", { class: "empty-pins" }, el("p", { text: "No change has been recorded yet." }), el("p", { class: "muted", text: s.workflow_read_only ? "Implementation recording is not connected for this cloud snapshot yet." : "Open a finding and record it after a person has made the change." })),
         el("details", { class: "calc panel" }, el("summary", { text: "How realised savings are measured" }),
           el("div", { class: "calc-body" }, el("dl", {}, Object.entries(s.verification.method).map(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]))))]
-        : items.length ? table(items) : el("div", { class: "empty-pins" }, el("p", { text: "Nothing in this list." })),
+        : items.length ? table(items) : el("div", { class: "empty-pins" }, el("p", { text: local.service!=="all" && !s.opportunities.length ? `No ${s.service_label} recommendations in this snapshot.` : "No recommendations match this phase." })),
       el("details", { class: "calc panel" }, el("summary", { text: "Data quality checks" }),
         el("div", { class: "calc-body" }, el("dl", {}, s.data_quality.map(c => [el("dt", { text: c.check }), el("dd", {}, pill(c.state === "ok" ? "on_track" : "acknowledged", c.state), " ", c.detail)])))),
       el("details", { class: "calc panel" }, el("summary", { text: "How savings are counted" }),

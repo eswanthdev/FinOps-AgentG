@@ -79,19 +79,22 @@
     const head = h("div", { class: "dc-head" }, "Data", s.synthetic ? h("span", { class: "badge-synth", text: "SYNTHETIC" }) : null);
     const cur = s.sources.find(x => x.key === "cur2");
     const missing = s.coverage.periods.filter(p => p.status === "missing").map(p => p.period);
-    card.append(head,
+    card.append(...[head,
       h("div", { class: "row" }, "Data through", h("b", { text: fmtDate(s.data_through) })),
       h("div", { class: "row" }, "Accounts", h("b", { text: String(s.accounts.length) })),
       h("div", { class: "row" }, "CUR 2.0", h("b", { text: cur && cur.state === "connected" ? "Loaded" : "No data" })),
       h("div", { class: "row" }, "Other sources", h("b", { text: `${s.sources.filter(x => x.state === "not_connected").length} not connected` })),
       missing.length ? h("div", { class: "row" }, "Missing months", h("b", { class: "up", text: missing.join(", ") })) : null,
       s.delivery_issues.length ? h("div", { class: "row" }, "Rejected deliveries", h("b", { class: "up", text: String(s.delivery_issues.length) })) : null,
-      h("button", { class: "link", type: "button", text: "View coverage and deliveries →", onclick: () => showView("data") }));
+      h("button", { class: "link", type: "button", text: "View coverage and deliveries →", onclick: () => showView("data") })].filter(Boolean));
     $("modePill").textContent = s.model.label;
     $("modePill").title = s.model.detail;
     $("modePill").setAttribute("aria-label", s.model.label + ". " + s.model.detail);
     $("dataPill").hidden = !s.synthetic;
-    if (s.synthetic) $("composerNote").textContent = "Synthetic demo data. Numbers are computed by code from CUR line items; no AI model is used.";
+    if (s.synthetic) $("composerNote").textContent = s.backend === "cloud" ? "Synthetic data in S3. AgentCore investigates; Athena calculates costs." : "Synthetic demo data. Numbers are computed by code from CUR line items; no AI model is used.";
+    if (s.backend === "cloud") {
+      document.querySelectorAll('.nav-item[data-view="govern"],.nav-item[data-view="anomalies"],.nav-item[data-view="budgets"]').forEach(b => { b.disabled = true; b.title = "Not connected to the cloud backend yet"; });
+    }
   }
   async function loadStatus() {
     try { state.status = await api("/api/status"); }
@@ -137,7 +140,8 @@
   function renderStarters() {
     const box = $("starterSuggestions");
     box.textContent = "";
-    STARTERS.forEach(([k, q]) => box.appendChild(h("button", { class: "suggestion", type: "button", onclick: () => ask(q) },
+    const starters = state.status && state.status.backend === "cloud" ? STARTERS.slice(0,4).concat([["Commitments","Show Savings Plans recommendations without adding them to rightsizing savings"],["Storage","Show available storage metrics"]]) : STARTERS;
+    starters.forEach(([k, q]) => box.appendChild(h("button", { class: "suggestion", type: "button", onclick: () => ask(q) },
       h("small", { text: k }), q)));
   }
   function newConversation() {
@@ -221,7 +225,18 @@
 
   function renderAssistant(body, resp) {
     if (resp.model_note) body.appendChild(h("div", { class: "notice", text: resp.model_note }));
-    if (resp.kind === "investigation") { window.CostLensInvestigate.render(body, resp); return; }
+    if (resp.kind === "investigation") {
+      window.CostLensInvestigate.render(body, resp);
+      if (resp.backend === "cloud" && resp.evidence_queries && resp.evidence_queries.length) {
+        const q = resp.evidence_queries[0].query;
+        state.previous = q;
+        const holder = h("div", {}, h("div", {class:"notice neutral",text:"Loading live dashboard…"}));
+        body.appendChild(holder);
+        api("/api/query", {method:"POST",body:{query:q}}).then(r => mountCard(holder,r.result,{holder,onResult:x=>{if(x.status==="ok")state.previous=x.query;}}))
+          .catch(e => {holder.textContent="";holder.appendChild(h("div",{class:"notice error",text:e.message}));});
+      }
+      return;
+    }
     if (resp.kind === "memory") { body.appendChild(h("p", { class: "msg-text", text: resp.message })); return; }
     if (resp.kind === "optimize") { window.CostLensOptimize.renderChat(body, resp); followups(body, resp.suggestions); return; }
     if (resp.kind === "govern") { window.CostLensGovern.renderChat(body, resp); followups(body, resp.suggestions); return; }
@@ -354,7 +369,7 @@
           h("dt", { text: "Query" }), h("dd", { text: JSON.stringify(r.query) })),
         h("pre", { text: c.sql_template + (c.parameters.length ? "\n-- parameters: " + c.parameters.join(", ") : "") }),
         src.length ? h("div", { class: "tbl-wrap" }, h("table", { class: "tbl" },
-          h("thead", {}, h("tr", {}, ["Billing period", "Delivery (execution id)", "Exported", "Status", "Data through"].map(t => h("th", { text: t })))),
+          h("thead", {}, h("tr", {}, ["Billing period", "Source execution / query id", "Exported", "Status", "Data through"].map(t => h("th", { text: t })))),
           h("tbody", {}, src.map(s => h("tr", {}, h("td", { text: s.billing_period }), h("td", { text: s.execution_id }),
             h("td", { text: fmtTs(s.export_timestamp) }), h("td", {}, statusPill(s.status)), h("td", { text: fmtDate(s.data_through) }))))))
           : null));
@@ -374,7 +389,7 @@
       kpi("Daily average", r.daily_average_display),
       r.comparison ? kpi("vs previous period", (r.comparison.change_pct === null ? "—" : (r.comparison.change_pct.startsWith("-") ? "" : "+") + r.comparison.change_pct + "%"),
         `${r.comparison.total_display} · ${r.comparison.label}`, pctClass(r.comparison.change_pct))
-        : kpi("vs previous period", "—", "Not enough data"),
+        : kpi("vs previous period", "—", r.backend === "cloud" ? "Comparison not requested" : "Not enough data"),
       r.series.length && q.group_by ? kpi("Top " + (r.group_label || "").toLowerCase(), r.series[0].name.length > 22 ? r.series[0].name.slice(0, 21) + "…" : r.series[0].name, `${r.series[0].total_display} · ${r.series[0].share_pct}%`) : null);
 
     const pr = presets();
@@ -521,15 +536,16 @@
     const page = $("dataPage");
     page.textContent = "";
     await loadStatus();
+    renderStarters();
     const s = state.status;
     if (!s) { page.appendChild(h("div", { class: "notice error", text: "Could not load data status." })); return; }
     let audit = [];
     try { audit = (await api("/api/audit")).events; } catch (e) { /* shown as empty */ }
     page.append(
       h("div", { class: "page-head" }, h("h2", { text: "Data & coverage" }),
-        h("p", { class: "muted", text: `Mode: ${s.synthetic ? "synthetic demo data (not real AWS)" : s.data_mode}. Reference date ${fmtDate(s.reference_date)}. Data through ${fmtDate(s.data_through)}${s.lag_days !== null ? ` (${s.lag_days} day lag, ${s.freshness})` : ""}.` })),
+        h("p", { class: "muted", text: `Mode: ${s.backend === "cloud" ? "live cloud connection; synthetic data" : s.synthetic ? "synthetic demo data (not real AWS)" : s.data_mode}. Reference date ${fmtDate(s.reference_date)}. Data through ${fmtDate(s.data_through)}${s.lag_days !== null ? ` (${s.lag_days} day lag, ${s.freshness})` : ""}.` })),
       h("div", { class: "data-grid" },
-        s.synthetic ? h("div", { class: "notice", text: "All accounts, resources and amounts here are synthetic fixtures generated for local testing. They resemble the AWS CUR 2.0 export format but are not real billing data." }) : null,
+        s.synthetic ? h("div", { class: "notice", text: s.backend === "cloud" ? "The connection is live. Every account, resource and amount in the S3 datasets is synthetic." : "All accounts, resources and amounts here are synthetic fixtures generated for local testing. They resemble the AWS CUR 2.0 export format but are not real billing data." }) : null,
         panel("Billing period coverage", h("div", { class: "tbl-wrap" }, h("table", { class: "tbl" },
           h("thead", {}, h("tr", {}, ["Period", "Status", "Active delivery", "Exported", "Data through", "Revisions", "Note"].map(t => h("th", { text: t })))),
           h("tbody", {}, s.coverage.periods.map(p => h("tr", {}, h("td", { text: p.period }), h("td", {}, statusPill(p.status)),
@@ -540,7 +556,7 @@
           h("thead", {}, h("tr", {}, ["Source", "Purpose", "State", "Detail"].map(t => h("th", { text: t })))),
           h("tbody", {}, s.sources.map(x => h("tr", {}, h("td", { text: x.name }), h("td", { text: x.purpose }), h("td", {}, statusPill(x.state)), h("td", { text: x.detail }))))))),
         panel("Access and permissions", h("p", { text: s.permissions.detail }),
-          h("p", { text: "Planned for the live pilot: a read-only role in the customer account with s3:GetObject and s3:ListBucket on the export prefix only (plus kms:Decrypt if needed). Not implemented yet." })),
+          h("p", { text: s.backend === "cloud" ? "Source data is read-only. Athena writes execution results to its separate results prefix." : "Planned for the live pilot: a read-only role in the customer account with s3:GetObject and s3:ListBucket on the export prefix only (plus kms:Decrypt if needed). Not implemented yet." })),
         panel("Delivery log", h("div", { class: "tbl-wrap" }, h("table", { class: "tbl" },
           h("thead", {}, h("tr", {}, ["Period", "Execution id", "Exported", "Outcome", "Rows", "Detail"].map(t => h("th", { text: t })))),
           h("tbody", {}, s.deliveries.slice().reverse().map(d => h("tr", {}, h("td", { text: d.billing_period || "—" }), h("td", { text: d.execution_id || "—" }),
@@ -568,11 +584,12 @@
     wire();
     renderStarters();
     await loadStatus();
+    renderStarters();
     try { state.dims = await api("/api/dimensions"); } catch (e) { state.dims = null; }
     refreshPinCount();
-    window.CostLensFeatures.refreshCounts();
+    if (!(state.status && state.status.backend === "cloud")) window.CostLensFeatures.refreshCounts();
     window.CostLensOptimize.refreshCount();
-    window.CostLensGovern.refreshCount();
+    if (!(state.status && state.status.backend === "cloud")) window.CostLensGovern.refreshCount();
     $("question").focus();
   }
   async function openQuery(query, label) {

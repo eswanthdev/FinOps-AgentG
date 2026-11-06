@@ -354,11 +354,12 @@ def build_messages(ref: date, question: str, previous: dict | None, history: lis
 
 
 def investigate(conn, client: ModelClient, question: str, previous: dict | None = None, *, clock=time.monotonic,
-                history: list[dict] | None = None, notes: list[str] | None = None, on_event=None) -> dict:
+                history: list[dict] | None = None, notes: list[str] | None = None, on_event=None,
+                tool_backend=None, tool_specs=None, reference_date: date | None = None, system_prompt: str | None = None) -> dict:
     """Run the tool loop. Returns status 'ok' with a checked answer, or 'failed' with a reason to show."""
-    tools = InvestigationTools(conn, {})
+    tools = tool_backend if tool_backend is not None else InvestigationTools(conn, {})
     audit = AuditLog(conn)
-    messages = build_messages(engine.reference_date(conn), question, previous, history, notes)
+    messages = build_messages(reference_date or engine.reference_date(conn), question, previous, history, notes)
     evidence = Evidence()
     trace: list[dict] = []
     queries: list[dict] = []
@@ -382,7 +383,7 @@ def investigate(conn, client: ModelClient, question: str, previous: dict | None 
             return fail("The investigation reached its time or token limit.", "limit")
         emit("step", "Thinking…")
         try:
-            turn = client.create(SYSTEM_PROMPT, messages, TOOLS)
+            turn = client.create(system_prompt or SYSTEM_PROMPT, messages, tool_specs if tool_specs is not None else TOOLS)
         except ModelUnavailable as exc:
             return fail(f"The model is not available ({exc}).", "model_error")
         turns += 1
@@ -437,6 +438,8 @@ def _run_tool(tools: InvestigationTools, audit: AuditLog, use: dict, count: int,
         audit.record("tool.call", {"worker": "investigator", "tool": name, "status": "error"})
         return {"type": "tool_result", "tool_use_id": use.get("id"), "is_error": True, "content": str(exc)[:500]}
     audit.record("tool.call", {"worker": "investigator", "tool": name, "status": result.get("status", "ok")})
+    if result.get("status") not in (None, "ok"):
+        step["status"] = result["status"]
     query = result.get("evidence_query")
     body = compact(result)
     text = json.dumps(body, sort_keys=True, default=str)
@@ -445,7 +448,10 @@ def _run_tool(tools: InvestigationTools, audit: AuditLog, use: dict, count: int,
     evidence.add(text)  # only what the model really saw counts as evidence
     if query:
         queries.append({"title": f"{name} {query.get('start')} to {query.get('end')}", "query": query})
-    return {"type": "tool_result", "tool_use_id": use.get("id"), "content": text}
+    response = {"type": "tool_result", "tool_use_id": use.get("id"), "content": text}
+    if result.get("status") in ("rejected", "unsupported"):
+        response["is_error"] = True
+    return response
 
 
 def reply(result: dict) -> dict:

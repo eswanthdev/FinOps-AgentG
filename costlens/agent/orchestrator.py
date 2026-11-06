@@ -57,6 +57,9 @@ def redact(text: str) -> str:
 
 
 def model_mode() -> dict:
+    from .. import cloud_app
+    if cloud_app.enabled():
+        return cloud_app.mode()
     provider = os.environ.get("COSTLENS_MODEL_PROVIDER", "").strip().lower()
     if provider in ("bedrock", "bedrock-nova"):
         if importlib.util.find_spec("boto3" if provider == "bedrock-nova" else "anthropic"):
@@ -263,6 +266,9 @@ class Orchestrator:
                 message = f"I did not save that: {exc}"
             return {"kind": "memory", "worker": "memory", "message": message, "suggestions": [], "mode": model_mode(), "result": None,
                     "interpretation": {"status": "ok", "module": "memory", "understood": [], "assumptions": [], "query": None}}
+        from .. import cloud_app
+        if cloud_app.enabled():
+            return cloud_app.ask(self.conn,question,previous,user_id,conversation,past,on_event)
         if budgets.is_budget_request(question):
             return self._ask_deterministic(question, previous)
         client = investigator.make_client()
@@ -329,6 +335,7 @@ class Orchestrator:
     def run_query(self, query: dict) -> dict:
         q = CostQuery.from_dict(query)
         self.audit.record("query.direct", {"query": q.to_dict()})
-        result = self.visualization.call("query_costs", q=q)
+        from .. import cloud_app
+        result = cloud_app.query(q.to_dict()) if cloud_app.enabled() else self.visualization.call("query_costs", q=q)
         return {"mode": model_mode(), "result": result, "worker": self.visualization.name,
                 "suggestions": self.visualization.follow_ups(result)}

@@ -1,5 +1,13 @@
 # Architecture
 
+Start with the [documentation index](README.md). The [AWS platform design](AWS_DATA_PLATFORM.md) includes both
+implemented synthetic pilot components and proposed production adapters; its implementation notes distinguish them.
+
+Implementation update: the [scoped cloud pilot](SCOPED_ATHENA_AGENTCORE.md) implements a bounded Athena tool
+backend, IAM MCP Gateway and separate AgentCore runtime over synthetic data. The [common model](COMMON_DATABASE.md)
+preserves source evidence and deduplicates recommendations. The diagram and local request flow below still describe
+the existing SQLite application, which has not been replaced by that pilot.
+
 ```
  deliveries (folder)          ┌──────────────────────── costlens (Python, stdlib only) ───────────────────────┐
  manifest.json + CSV  ──────▶ │ ingest/sources.py   ExportSource protocol: LocalDirectorySource (done),      │

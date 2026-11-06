@@ -94,6 +94,15 @@ def main(argv: list[str] | None = None) -> int:
     i.add_argument("--db", required=True)
     i.add_argument("--synthetic", action="store_true")
 
+    native = sub.add_parser("ingest-aws-cur", help="ingest an explicitly listed local CUR CSV snapshot (no AWS access)")
+    native.add_argument("--source", required=True)
+    native.add_argument("--file", action="append", required=True, dest="files")
+    native.add_argument("--db", required=True)
+    native.add_argument("--export-name", required=True)
+    native.add_argument("--execution-id", required=True)
+    native.add_argument("--billing-period", required=True)
+    native.add_argument("--generated-at", required=True)
+
     s = sub.add_parser("status")
     s.add_argument("--db", required=True)
 
@@ -107,6 +116,24 @@ def main(argv: list[str] | None = None) -> int:
     e.add_argument("--min-pass", type=int, default=90, help="percent of questions that must pass")
 
     a = p.parse_args(argv)
+    if a.cmd == "ingest-aws-cur":
+        from .ingest.aws_cur import LocalAwsCurDelivery
+        try:
+            source = LocalAwsCurDelivery(a.source, files=a.files, export_name=a.export_name,
+                                         execution_id=a.execution_id, billing_period=a.billing_period,
+                                         generated_at=a.generated_at)
+            conn = connect(a.db)
+            try:
+                outcome = source.ingest(conn)
+                if outcome.status == "active":
+                    set_meta(conn, "data_mode", "customer-local")
+                _print_outcomes([outcome])
+            finally:
+                conn.close()
+            return 0 if outcome.status in ("active", "duplicate", "stale") else 1
+        except (OSError, ValueError, EOFError) as exc:
+            print(f"CUR snapshot rejected: {exc}", file=sys.stderr)
+            return 1
     if a.cmd == "eval-agent":
         from .agent import agent_eval, investigator
         client = investigator.make_client()

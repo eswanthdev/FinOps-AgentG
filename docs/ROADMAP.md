@@ -1,5 +1,16 @@
 # Roadmap
 
+## Current next work: AWS evidence platform
+
+Synthetic pilot update: [scoped Athena/MCP/AgentCore](SCOPED_ATHENA_AGENTCORE.md) and the
+[common opportunity database](COMMON_DATABASE.md) are implemented and connected in the test account.
+Production native-schema onboarding, managed workflow state and dashboard/backend parity remain separate work.
+
+Follow the ordered gates in [AWS evidence platform](AWS_DATA_PLATFORM.md): real CUR/COH adapters,
+S3 ingestion, Compute Optimizer/Storage Lens/Trusted Advisor, Athena, then MCP and AgentCore.
+The first milestone is a read-only single-customer pilot. Step 1 documents the design; subsequent
+steps are not implemented by this document. Preserve the synthetic demo throughout.
+
 Order agreed: **Visualize → Cost Optimization Engineer → Governance**. Each stage ends with tests and an honest
 "what works / what does not" note.
 

@@ -2,6 +2,10 @@
 
 An evidence-backed FinOps agent for AWS. The product has three pillars:
 
+For the current hosted cloud deployment, configuration, known limits and operations, start with the
+[documentation index](docs/README.md). The feature table and detailed local workflows below describe the local demo;
+the cloud UI currently connects Visualize and read-only Optimize only.
+
 | Pillar | Status in this release |
 |---|---|
 | **Visualize** — ask a cost question, get an adjustable Cost Explorer-style dashboard | **Implemented (local, synthetic data)** |
@@ -10,10 +14,24 @@ An evidence-backed FinOps agent for AWS. The product has three pillars:
 | **Anomalies** — unusual cost increases, with drivers and likely owner | **Implemented (local, synthetic data)** |
 | **Budgets & forecasting** — plain-English budgets, run-rate forecasts, email alerts | **Implemented (local, synthetic data)**. Budgets live in CostLens, not in AWS Budgets. |
 
-> **Everything you see in the demo is synthetic data.** No AWS account, credential or API is used anywhere.
+> **Everything you see in the demo is synthetic data.** The hosted pilot uses real AWS S3, Athena, MCP, AgentCore and Bedrock services with invented billing/resource data. Local deterministic mode requires no AWS access.
 > The app labels itself "Synthetic data" and "Deterministic mode" on every screen.
 
 ## Run it locally
+
+For the first local AWS CUR CSV adapter and its current limits, see
+[Local AWS CUR ingestion](docs/LOCAL_AWS_CUR.md). Native manifests, Parquet and S3 remain pending.
+
+The separate [synthetic S3 Parquet pilot](docs/SYNTHETIC_S3_PILOT.md) provides generated Parquet,
+S3 publishing/fetching and ingestion into the local engine. It uses CostLens test schemas;
+native AWS Parquet adapters and a production Athena backend remain pending.
+
+The [scoped Athena/MCP/AgentCore pilot](docs/SCOPED_ATHENA_AGENTCORE.md) now connects synthetic S3 data to a
+separate cloud investigator. Its [common database](docs/COMMON_DATABASE.md) groups overlapping opportunities
+while preserving original evidence. This pilot is not production-ready or a replacement for every local module.
+
+The hosted app now uses that backend for [cloud chat and dashboards](docs/CLOUD_UI.md), including saved
+dashboard queries and report refreshes. Local mode remains available by default.
 
 Requires Python 3.11+ (tested on 3.13). No third-party packages are needed to run the app.
 
@@ -196,25 +214,26 @@ are flagged. On the demo data it finds exactly the two planted cases.
 
 ## What is NOT implemented
 
-- Any real AWS access (S3, Athena, Cost Explorer, Cost Optimization Hub, Compute Optimizer, etc.).
-  `S3ExportSource` exists only as a documented interface and raises `NotImplementedError`.
+- Native customer export ingestion and real billing reconciliation. The legacy `S3ExportSource` interface still
+  raises `NotImplementedError`; separate scripts fetch synthetic S3 snapshots and the hosted cloud path queries Athena.
 - Real Cost Optimization Hub and Compute Optimizer exports: the fixtures use a subset of their column names and
   have not been tested against real files.
-- Any tested AI model connection: the Bedrock client has never run against AWS.
+- A production-qualified investigation model evaluation. Live Nova Lite smoke checks have passed on synthetic data.
 - Compute Optimizer evidence for anything except EC2 (so RDS findings stay "needs evidence"). Verification of commitment
   purchases.
 - Any enforcement: CostLens never applies an SCP or tag policy. Real approvals with identity need SSO. AWS Budgets
   actions are not drafted, because budgets live in CostLens and not in AWS Budgets.
 - Real AWS Budgets, scheduled alert checks, anomaly email subscriptions, seasonality-aware forecasts.
-- Multi-user login, tenant isolation beyond "one database file per tenant", encryption at rest.
+- Per-user resource authorization and production tenant isolation. The hosted demo has Cognito login, HTTPS
+  and encrypted disk; local mode remains a single-user SQLite application.
 - Real AWS Data Exports manifest format: the fixture manifest is our own documented contract
   (see docs/DATA_CONTRACTS.md); a mapping adapter is needed for the real one.
 
 ## Tests
 
 ```bash
-python -m pytest -q                      # 537 tests: unit, integration (HTTP), browser UI
-python -m pytest -q --ignore=tests/test_ui.py   # without a browser
+python -m pytest -q                      # unit, HTTP integration and available browser tests
+python -m pytest -q --ignore=tests/test_ui.py --ignore=tests/test_cloud_ui.py   # without a browser
 ```
 
 UI tests need Playwright and a Chrome/Chromium binary (`COSTLENS_CHROME=/path/to/chrome`); they skip otherwise.

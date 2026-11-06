@@ -16,9 +16,9 @@ import re
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 
-from . import anomalies, budgets, hosting, notify
+from . import anomalies, budgets, hosting, notify, cloud_app
 from .agent import govern, optimize, session, verify
 from .agent.orchestrator import ACTIVE_WORKERS, Orchestrator, PLANNED_WORKERS, model_mode
 from .query import engine
@@ -118,6 +118,8 @@ def make_handler(db_path: str, source_label: str):
                 send({"type": "done", "response": response})
             except (BrokenPipeError, ConnectionResetError):
                 log.info("client left during a stream")
+            except cloud_app.CloudUnavailable as exc:
+                send({"type":"error","error":str(exc)})
             except Exception:  # noqa: BLE001 - headers are sent, so report inside the stream
                 log.error("unhandled stream error: %s", traceback.format_exc(limit=3))
                 send({"type": "error", "error": "Internal error. Check the server log."})
@@ -126,12 +128,16 @@ def make_handler(db_path: str, source_label: str):
             conn = None
             try:
                 self._check_host()
+                if cloud_app.enabled() and urlparse(self.path).path.startswith("/api/"):
+                    self._user()
                 conn = connect(db_path)
                 fn(conn)
             except ApiError as exc:
                 self._json(exc.status, {"error": exc.message})
             except QueryError as exc:
                 self._json(400, {"error": str(exc)})
+            except cloud_app.CloudUnavailable as exc:
+                self._json(503,{"error":str(exc)})
             except Exception:  # noqa: BLE001
                 log.error("unhandled error: %s", traceback.format_exc(limit=3))
                 self._json(500, {"error": "Internal error. Check the server log."})
@@ -168,17 +174,32 @@ def make_handler(db_path: str, source_label: str):
                 return self.wfile.write(body)
 
             def route(conn):
+                def optimization_service():
+                    values=parse_qs(urlparse(self.path).query).get("service",["all"])
+                    if len(values)!=1:
+                        raise QueryError("select one optimization service")
+                    return values[0]
                 if path == "/api/status":
-                    s = data_status(conn, source_label)
+                    s = cloud_app.status() if cloud_app.enabled() else data_status(conn, source_label)
                     s["model"] = model_mode()
                     s["planned_modules"] = PLANNED_WORKERS
                     s["active_modules"] = ACTIVE_WORKERS
                     s["email"] = notify.describe()
                     return self._json(200, s)
+                if cloud_app.enabled() and path == "/api/opportunities":
+                    self._user()
+                    return self._json(200,cloud_app.opportunities())
+                if cloud_app.enabled() and path=="/api/optimize":
+                    self._user()
+                    from .optimization_view import for_service
+                    return self._json(200,for_service(cloud_app.optimization(),optimization_service()))
+                if cloud_app.enabled() and path in ("/api/anomalies","/api/optimize","/api/govern","/api/budgets"):
+                    raise ApiError(501,"This module is not connected to the cloud backend yet.")
                 if path == "/api/anomalies":
                     return self._json(200, anomalies.summary(conn))
                 if path == "/api/optimize":
-                    return self._json(200, optimize.summary(conn))
+                    from .optimization_view import for_service
+                    return self._json(200,for_service(optimize.summary(conn),optimization_service()))
                 if path == "/api/govern":
                     return self._json(200, govern.summary(conn))
                 user = self._user()
@@ -206,7 +227,7 @@ def make_handler(db_path: str, source_label: str):
                     return self._json(200, {"budgets": budgets.list_status(conn), "outbox": budgets.outbox(conn),
                                             "email": notify.describe(), "forecast": budgets.org_forecast(conn)})
                 if path == "/api/dimensions":
-                    return self._json(200, engine.dimension_values(conn))
+                    return self._json(200, cloud_app.dimensions() if cloud_app.enabled() else engine.dimension_values(conn))
                 if path == "/api/pins":
                     pins = [{"id": r["id"], "title": r["title"], "query": json.loads(r["query_json"]),
                              "created_at": r["created_at"]}
@@ -226,6 +247,8 @@ def make_handler(db_path: str, source_label: str):
                 data = self._body()
                 orch = Orchestrator(conn)
                 user = self._user()
+                if cloud_app.enabled() and any(path.startswith(prefix) for prefix in ("/api/optimize/","/api/govern/","/api/anomalies/","/api/budgets")):
+                    raise ApiError(501,"This workflow is not connected to the cloud backend yet.")
                 if path in ("/api/ask", "/api/ask/stream"):
                     q = data.get("question")
                     if not isinstance(q, str):
@@ -341,6 +364,8 @@ def make_handler(db_path: str, source_label: str):
             def route(conn):
                 self._body()  # enforces JSON content type + same origin
                 user = self._user()
+                if cloud_app.enabled() and any(path.startswith(prefix) for prefix in ("/api/optimize/","/api/govern/","/api/anomalies/","/api/budgets")):
+                    raise ApiError(501,"This workflow is not connected to the cloud backend yet.")
                 for pattern, remove, cast in ((r"^/api/memories/(\d+)$", session.delete_memory, int),
                                               (r"^/api/reports/(\d+)$", session.delete_report, int),
                                               (r"^/api/conversations/([0-9a-f]{16})$", session.delete_conversation, str)):
